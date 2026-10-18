@@ -8,6 +8,7 @@ detail (module; blocks; every day's date, hours, title, block, line and content;
     python3 tools/compare_parsers.py --count 5000 --seed 7
     python3 tools/compare_parsers.py --only 412           # just random plan 412 of the seed, printed in full
     python3 tools/compare_parsers.py --save /tmp/diffs    # also write every differing random plan to a file
+    python3 tools/compare_parsers.py --php "docker run --rm -i -v $PWD:$PWD:ro --entrypoint php moodlehq/moodle-php-apache:8.1"
 
 Sections
     fixtures           tests/fixtures/plans/*.md and cases/*.md through the CLI's file mode, inputs as in the selftest
@@ -24,6 +25,7 @@ import datetime as dt
 import json
 import math
 import random
+import shlex
 import subprocess
 import sys
 from collections import Counter
@@ -36,6 +38,7 @@ import check_plan  # noqa: E402
 FIXTURES = ROOT / "tests" / "fixtures"
 CLI = ROOT / "tools" / "plan_parser_cli.php"
 DEFAULT_TIMETABLE = {0: 2.0, 4: 2.0}
+PHP = ["php"]  # set from --php
 
 
 # ── running both parsers ────────────────────────────────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ def php_shape(result):
 def php_batch(requests):
     """Runs the PHP parser once over many requests, through the CLI's JSON-lines mode."""
     lines = "".join(json.dumps(r) + "\n" for r in requests)
-    out = subprocess.run(["php", str(CLI), "--jsonl"], input=lines.encode("utf-8"), capture_output=True, check=True)
+    out = subprocess.run(PHP + [str(CLI), "--jsonl"], input=lines.encode("utf-8"), capture_output=True, check=True)
     # Split on "\n" only: the output may hold U+0085, which str.splitlines() would also split on.
     results = [json.loads(line) for line in out.stdout.decode("utf-8").split("\n") if line]
     if len(results) != len(requests):
@@ -91,7 +94,7 @@ def php_batch(requests):
 
 
 def php_file(path, holidays_file, timetable, year):
-    args = ["php", str(CLI), str(path), "--full", f"--holidays={holidays_file}",
+    args = PHP + [str(CLI), str(path), "--full", f"--holidays={holidays_file}",
             "--timetable=" + ("none" if timetable is None else ",".join(f"{k}:{v}" for k, v in timetable.items()))]
     if year:
         args.append(f"--year={year[0]}:{year[1]}")
@@ -383,7 +386,9 @@ def main():
     ap.add_argument("--only", type=int, help="run only this random plan and print it")
     ap.add_argument("--save", type=Path, help="write each differing random plan to this directory")
     ap.add_argument("--show", type=int, default=10, help="differing random plans to print (default 10)")
+    ap.add_argument("--php", default="php", help="command that runs PHP (default php), e.g. to try another version")
     args = ap.parse_args()
+    PHP[:] = shlex.split(args.php)
 
     holidays_file = FIXTURES / "holidays-expanded.json"
     holidays = json.loads(holidays_file.read_text(encoding="utf-8"))
