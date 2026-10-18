@@ -285,7 +285,7 @@ Import and approval each run in one transaction: a failure leaves no half-saved 
 
 ### REQ-LCK-001 Approved plan is read-only
 Phase: M2 · Status: agreed
-An approved plan rejects any change to its items, timetable and source text through every path: form, service call and a tampered request.
+An approved plan rejects any change to its items, timetable and source text through every path: form, service call and a tampered request. Its name (module code and title) and its course link may still be changed (decided by the teacher, 2026-10-18), and it cannot be deleted.
 
 ### REQ-LCK-002 Approval is final
 Phase: M2 · Status: agreed
