@@ -112,6 +112,28 @@ local/classprogress/
 
 **Documentation and release:** `README.md` (what it does, requirements, install, translations, privacy statement, limits) and `CHANGES.md` (newest first; the Marketplace release workflow uses it as release notes). The rules above are detailed, with sources, in `docs/moodle-rules/` and summarised in `docs/MOODLE_STANDARDS.md`. How to set up and use the development environment (test stacks, labs, daily workflow, M0 checklist) is in `docs/DEV_ENVIRONMENT.md`.
 
+## 3b. Hybrid architecture (decision 12, 2026-10-18)
+
+**Two plugins, two repositories:**
+
+| | `local_classprogress` (this repository) | `mod_classprogress` (new repository `moodle-mod_classprogress`) |
+|---|---|---|
+| Owns | `schoolyear`, `holiday`, `evaluation` (private to each teacher, user context) | the instance table `classprogress` (= the plan: `course`, `name`, `intro`, `introformat`, `timemodified` plus school year, status, source text, approval, module code/title, dates) and `classprogress_slot`, `_item`, `_import`, `_entry`, `_entry_hist`, `_holiday` and `_evaluation` (copies taken at approval) |
+| Pages | top-menu link, school years, overview of the teacher's plan activities (REQ-MOD-005) | `mod_form.php` (name, school year of the adding teacher, timetable, dates with date pickers), `view.php` (draft: import and preview; approved: daily log), entry form, history, `index.php` |
+| Access | `local/classprogress:use` (as now) | `mod/classprogress:addinstance` (editing teacher, manager), `:view` and `:edit` (teacher, editing teacher, manager), checked in the module context; students neither see nor open it (`cm_info_dynamic` hides it) |
+| Privacy | user context, delete everything of the user | module context: export what the user authored; erasure anonymises authorship and keeps content (REQ-PRV-003) |
+| Shared code | the pure library: `dates`, `calendar`, `holiday_parser`, `plan_parser`, `entry_rules`, `session_list`, `written_on` and their tests stay here | depends on `local_classprogress` (`$plugin->dependencies`) and uses that library |
+| Events | none of its own | `plan_imported`, `plan_approved`, `entry_*` in module context (moved from local) |
+| Backup | not needed (user data, cross-course) | moodle2 backup and restore (REQ-MOD-006); course reset (REQ-MOD-007) |
+
+The overview in the local plugin reads the activities through a small class of the mod plugin when that plugin is installed (`core_plugin_manager`), so the local plugin does not hard-depend on the mod.
+
+**Migration:** nothing has been released, so the local plugin's upgrade drops its plan, slot, planitem, import, entry and entry_hist tables, and the services and pages that used them move to the mod. The test sites' plugin data is wiped once (the teacher re-imports a plan in a minute).
+
+**Development:** the mod repository is checked out at `~/PROJECTS/moodle-mod_classprogress` and mounted next to the local plugin in each stack (`mod/classprogress` on 4.5, `public/mod/classprogress` on 5.3). Its CI installs the local plugin first (`moodle-plugin-ci add-plugin jvidal86/moodle-local_classprogress`). Plan, spec, docs and test data stay in this repository.
+
+**Order of work (M3):** (1) merge the date-picker fix; (2) one agent creates the mod plugin, moves plans, import and approval into it with their tests, adds capabilities, the overview, privacy, events, backup/restore and reset, and reaches today's behaviour inside the activity; (3) the daily log (LOG, HIS) is built inside the activity from the paused M3 work; (4) review round R3; (5) the teacher logs real days.
+
 ## 4. Plan import (Markdown: module, RA or block, day)
 
 The plan is plain Markdown that a person or an AI assistant can write and edit anywhere, then paste into the plugin. Three heading levels:
