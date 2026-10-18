@@ -6,14 +6,19 @@ Format (see PLAN.md section 4):
     ## <RA or block>                              level 2: applies to the days below it
     ### <date> [<hours>h] <title>                 level 3: one day; everything below is its plan (Markdown)
 
-Date: 2026-09-16 or 16/09/2026, optionally preceded by a weekday (dl dt dm dc dj dv ds dg, mon..sun, lun..dom).
-Headings inside code fences, and headings of level 4 or more, are part of the body. Text before the first
-heading is ignored. Several days may share a date.
+Date: 2026-09-16 or 16/09/2026 (digits 0-9 only), optionally preceded by a weekday (dl dt dm dc dj dv ds dg,
+mon..sun, lun..dom, any letter case). Any other word before the date makes the heading a bad_date.
+A trailing run of # is removed from a heading only when a space comes before it (REQ-PLN-001).
+Headings inside code fences, and headings of level 4 or more, are part of the body. Fences follow CommonMark:
+up to 3 spaces, then 3+ backticks or tildes; a backtick fence's info text has no backtick; it closes with the same
+character, at least as long (REQ-PLN-008). Text before the first heading is ignored. Several days may share a date.
+Input: a leading BOM is ignored; lines end with LF, CRLF or CR (REQ-PLN-015). Every step is linear in the input
+(REQ-PLN-016).
 
 Issues
     errors (block approval):   bad_date, multiple_modules
     warnings (must be confirmed): no_module_heading, no_block, empty_day, out_of_order, on_holiday,
-                                  weekday_mismatch, no_class_weekday, outside_year, missing_hours
+                                  weekday_mismatch, no_class_weekday, outside_year, missing_hours, unclosed_fence
 
 Usage
     python3 tools/check_plan.py test-data/plans/0372.md --holidays test-data/holidays-centre-2026-27.txt \
@@ -25,6 +30,7 @@ import datetime as dt
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,14 +40,35 @@ WEEKDAYS = {
     "mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6,
     "lun": 0, "mar": 1, "mié": 2, "mie": 2, "jue": 3, "vie": 4, "sáb": 5, "sab": 5, "dom": 6,
 }
-DATE_RE = r"(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})"
-HEADING = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
-FENCE = re.compile(r"^\s*(```|~~~)")
+DATE_RE = r"([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})"
+# Linear patterns only (REQ-PLN-016): the closing #s of a heading are removed in code, not by backtracking.
+HEADING = re.compile(r"^(#{1,6})[ \t]+(.*)$")
+OPEN_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 DAY = re.compile(
-    r"^(?:(" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")\.?\s+)?" + DATE_RE +
-    r"(?:\s*\[\s*(\d+(?:[.,]\d+)?)\s*h\s*\])?\s*(.*)$", re.I)
+    r"^(?:([^\W\d_]+)\.?\s+)?" + DATE_RE +
+    r"(?:\s*\[\s*([0-9]+(?:[.,][0-9]+)?)\s*h\s*\])?\s*(.*)$", re.I)
 SEPARATOR = re.compile(r"\s+[·—–-]\s+|:\s+")
-CODE_WORD = re.compile(r"^[A-Za-z]{0,4}\d+[\w.-]*$")
+CODE_WORD = re.compile(r"^[A-Za-z]{0,4}[0-9]+[\w.-]*$")
+RANGE_WORD_THEN_DIGIT = re.compile(r"^(?:to|a|–|—|-|\.\.|→)\s*[0-9]", re.I)
+LINE_BREAK = re.compile(r"\r\n|\r|\n")
+
+
+def split_lines(text):
+    """Lines end with LF, CRLF or CR (REQ-PLN-015); a leading byte-order mark is ignored."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return LINE_BREAK.split(text)
+
+
+def heading_title(rest):
+    """Remove a closing run of # only when a space comes before it (REQ-PLN-001), without regex backtracking."""
+    t = rest.rstrip(" \t")
+    j = len(t)
+    while j > 0 and t[j - 1] == "#":
+        j -= 1
+    if j < len(t) and (j == 0 or t[j - 1] in " \t"):
+        t = t[:j]
+    return t.strip()
 
 
 def to_date(text):
@@ -58,7 +85,7 @@ def parse_holidays(text):
     """Holiday lines: a date or 'date to date', then an optional label. '#' lines are ignored."""
     days = {}
     pattern = re.compile(r"^" + DATE_RE + r"\s*(?:(?:to|a|–|—|-|\.\.|→)\s*" + DATE_RE + r")?\s*(.*)$", re.I)
-    for raw in text.splitlines():
+    for raw in split_lines(text):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -70,6 +97,8 @@ def parse_holidays(text):
         if not a or not b or b < a:
             continue
         label = m.group(3).strip()
+        if not m.group(2) and RANGE_WORD_THEN_DIGIT.match(label):
+            continue  # bad_end_date (REQ-HOL-002): a mistyped period end is not a one-day holiday
         d = a
         while d <= b:
             days.setdefault(d, label)
@@ -94,7 +123,7 @@ def parse(text, holidays=None, timetable=None, year=None):
     modules = []
     block = None
     current = None
-    in_fence = False
+    fence = None          # (character, length, line) of the open code fence
     prev_date = None
 
     def issue(level, code, line, msg):
@@ -104,15 +133,21 @@ def parse(text, holidays=None, timetable=None, year=None):
         if current is not None:
             current["content"] = "\n".join(current["body"]).strip()
 
-    for no, line in enumerate(text.splitlines(), 1):
-        if FENCE.match(line):
-            in_fence = not in_fence
-        m = None if in_fence else HEADING.match(line)
+    for no, line in enumerate(split_lines(text), 1):
+        m = None
+        if fence is None:
+            f = OPEN_FENCE.match(line)
+            if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):
+                fence = (f.group(1)[0], len(f.group(1)), no)
+            else:
+                m = HEADING.match(line)
+        elif re.match(r"^ {0,3}" + re.escape(fence[0]) + "{" + str(fence[1]) + r",}[ \t]*$", line):
+            fence = None
         level = len(m.group(1)) if m else 0
         if level in (1, 2, 3):
             close_day()
             current = None
-            title = m.group(2).strip()
+            title = heading_title(m.group(2))
             if level == 1:
                 code, name = split_module(title)
                 modules.append({"code": code, "title": name, "line": no})
@@ -128,7 +163,13 @@ def parse(text, holidays=None, timetable=None, year=None):
                 hours = float(dm.group(3).replace(",", ".")) if dm.group(3) else None
                 current = {"date": date, "hours": hours, "title": dm.group(4).strip(), "block": block, "line": no, "body": []}
                 days.append(current)
-                if dm.group(1) and WEEKDAYS[dm.group(1).lower()] != date.weekday():
+                weekday = WEEKDAYS.get(dm.group(1).lower()) if dm.group(1) else None
+                if dm.group(1) and weekday is None:
+                    issue("error", "bad_date", no, f"Not a weekday before the date in: {title}")
+                    days.pop()
+                    current = None
+                    continue
+                if dm.group(1) and weekday != date.weekday():
                     issue("warning", "weekday_mismatch", no, f"{dm.group(1)} is not the weekday of {date}")
                 if prev_date and date < prev_date:
                     issue("warning", "out_of_order", no, f"{date} comes after {prev_date}")
@@ -149,6 +190,8 @@ def parse(text, holidays=None, timetable=None, year=None):
         elif current is not None:
             current["body"].append(line)
     close_day()
+    if fence is not None:
+        issue("warning", "unclosed_fence", fence[2], "A code fence is never closed; it may hide later days")
 
     for d in days:
         if not d["content"]:
@@ -215,9 +258,13 @@ def selftest():
 
     default_tt = {0: 2.0, 4: 2.0}
     for name, want in cases.items():
-        text = (base / "cases" / name).read_text(encoding="utf-8")
+        text = (base / "cases" / name).read_bytes().decode("utf-8")  # keep CR and CRLF as written
         tt = default_tt if "timetable" not in want else parse_timetable(want["timetable"])
+        started = time.perf_counter()
         got = summarize(parse(text, holidays, tt, year))
+        if time.perf_counter() - started > 1.0:
+            failures += 1
+            print(f"FAIL case {name}: took {time.perf_counter() - started:.2f} s (REQ-PLN-016 allows 1 s)")
         check(f"case {name}", got, {k: v for k, v in want.items() if k not in ("timetable", "req")})
     print("\n" + ("all passed" if not failures else f"{failures} mismatch(es)"))
     return 1 if failures else 0

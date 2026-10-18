@@ -177,7 +177,7 @@ End-to-end tests are Behat, Moodle's own e2e layer: about eight teacher-journey 
 
 1. **Freeze.** Commit and tag the phase (`phase-M2-done`); nothing new is built during the round, only fixes.
 2. **Self-checks (automatic).** The whole test suite and the CI matrix (PHP 8.1 on 4.5, PHP 8.3 on 5.3, PostgreSQL and MariaDB); `python3 tools/check_plan.py --selftest`; `python3 tools/check_traceability.py --strict M<n>`; developer debugging on (`$CFG->debug = DEBUG_DEVELOPER`) while clicking through every screen.
-3. **Independent review.** Fresh agents get the repository and the checklists, **not the author's conclusions**, one per lens below, plus the phase-specific checks in 6.3. For code, the `code-review` and `security-review` skills are used. Findings go back as evidence (file, line, how to reproduce), not as opinions.
+3. **Independent review** (in R1, R2 and R5; decision 11). Fresh agents get the repository and the checklists, **not the author's conclusions**, one per lens below, plus the phase-specific checks in 6.3. For code, the `code-review` and `security-review` skills are used. Findings go back as evidence (file, line, how to reproduce), not as opinions.
 4. **Triage.** Every finding is written to `docs/reviews/R<n>-<phase>.md` (template: `docs/reviews/TEMPLATE.md`) with a severity:
    - **P1:** data loss, a leak between users, a security hole, or a wrong figure shown to the inspector.
    - **P2:** a functional bug, a failed standard (phpcs, `validate`, a rule in `docs/MOODLE_STANDARDS.md`), or a flaky test.
@@ -240,6 +240,8 @@ Decided:
 7. The plan is Markdown with three levels: `#` module (code and text), `##` RA or block, `###` day (date in the heading, free Markdown below with bullets and so on). One module per plan. No table, no XLSX import in v1.
 8. The work is split into phases with a review round after each (coherence, errors, bug hunting), and a phase does not start until the previous round is closed (section 6). One exception, to work in parallel: pure-logic code of a later phase (parsers, calendar) may be written test-first on its own branch while an earlier phase is being finished; it is merged only after the earlier review round closes, and only for requirements already agreed.
 9. Spec-driven and test-driven: each phase starts with agreed requirements (`docs/spec/REQUIREMENTS.md`), code is written test first, every requirement is proved by a test that cites its id, and Behat covers about eight end-to-end teacher journeys (`docs/TESTING_STRATEGY.md`).
+10. PHPUnit tests carry their metadata as docblock annotations only (`@covers`, `@group REQ-…`, `@dataProvider`), no attributes. Verified in CI: they pass on 4.5 (PHPUnit 9.6) and 5.3 (PHPUnit 11.5, one deprecation notice per item, not a failure). Revisit only when a supported Moodle version ships PHPUnit 12.
+11. Independent review agents run in rounds R1, R2 and R5. R0, R3 and R4 use the automatic checks plus the phase-specific checks in section 6.3.
 
 The sample of real plan text that was needed is covered: `test-data/` holds three real plans from your CFGS material (section 10). What remains for M2 is your sign-off after trying the importer on your own plans (R2).
 

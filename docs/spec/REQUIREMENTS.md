@@ -8,8 +8,8 @@ Format and cycle: see `README.md`. All requirements below were accepted (status 
 
 ### REQ-PLN-001 Module heading
 Phase: M2 · Status: agreed
-The plan has at most one `#` heading: the module. Its code is the text before the first separator (` · `, ` — `, ` – `, ` - ` or `: `); without a separator the first word is the code only if it looks like one (letters then digits, `MP03`); otherwise there is no code. A plan without a `#` heading is allowed and gives the warning `no_module_heading`.
-Examples: `test-data/plans/0372.md` (`MP 0372 · Gestió de bases de dades`), `test-data/cases/formats.md` (no code), `test-data/cases/no-module-heading.md`.
+The plan has at most one `#` heading: the module. Its code is the text before the first separator (` · `, ` — `, ` – `, ` - ` or `: `); without a separator the first word is the code only if it looks like one (letters then digits, `MP03`); otherwise there is no code. A plan without a `#` heading is allowed and gives the warning `no_module_heading`. In every heading, a trailing run of `#` is removed only when a space comes before it: `## Bloc 1 ##` reads `Bloc 1`, while `# Programació en C#` keeps its `#` (changed 2026-10-18).
+Examples: `test-data/plans/0372.md` (`MP 0372 · Gestió de bases de dades`), `test-data/cases/formats.md` (no code), `test-data/cases/no-module-heading.md`, `test-data/cases/hash-in-title.md`.
 
 ### REQ-PLN-002 One module per plan
 Phase: M2 · Status: agreed
@@ -43,8 +43,8 @@ Examples: `test-data/cases/out-of-order-empty.md`.
 
 ### REQ-PLN-008 Headings inside code and deeper headings
 Phase: M2 · Status: agreed
-Headings inside code fences (``` or ~~~) and headings of level 4 or more are part of the body, never structure.
-Examples: `test-data/cases/code-fence.md`.
+Headings inside code fences and headings of level 4 or more are part of the body, never structure. Fences follow standard Markdown (changed 2026-10-18): a fence opens with a line that starts, after at most three spaces, with three or more backticks or tildes, and a backtick fence's info text may not contain a backtick (so a line like ```` ```ls``` ```` is inline code, not a fence). It closes only with a line of the same character, at least as long, followed by nothing but spaces (`~~~` does not close a ```` ``` ```` fence). A fence still open at the end of the text gives the warning `unclosed_fence` at the line that opened it, because it may have swallowed later days.
+Examples: `test-data/cases/code-fence.md`, `test-data/cases/fences.md`, `test-data/cases/unclosed-fence.md`.
 
 ### REQ-PLN-009 Text before the first heading
 Phase: M2 · Status: agreed
@@ -76,6 +76,16 @@ Phase: M2 · Status: agreed
 The three real plans in `test-data/plans/` (0372, 0374, 0377) are read with the expected module, block count, day count, hours, first and last date, and no errors or warnings. The PHP importer must give the same results as `tools/check_plan.py` on all of them.
 Examples: `test-data/expected.json`.
 
+### REQ-PLN-015 Text encoding and characters
+Phase: M2 · Status: agreed
+Added 2026-10-18. The plan must be valid UTF-8; otherwise it is refused as a whole with the error `not_utf8`. A leading byte-order mark is ignored. Lines end with LF, CRLF or CR. Dates and hours are written with the digits 0 to 9 only. A word before the date is accepted only if it is one of the weekday forms in REQ-PLN-004, in any letter case (`DL`, `Mié`, `SÁB`); any other word, including look-alike letters such as `ſat` or `FRİ`, makes the heading the error `bad_date`. Unusual input never stops the parser with a crash.
+Examples: `test-data/cases/bom-and-line-endings.md`, `test-data/cases/odd-weekdays.md`, `test-data/cases/unicode-digits.md`.
+
+### REQ-PLN-016 Speed on hostile input
+Phase: M2 · Status: agreed
+Added 2026-10-18. Reading a plan takes time proportional to its length: lines with thousands of spaces or `#` characters are read in well under a second by both the reference parser and the plugin, so a pasted plan at the size limit cannot tie up the server.
+Examples: `test-data/cases/long-lines.md`.
+
 ---
 
 ## HOL · Holidays (M1)
@@ -87,7 +97,7 @@ Examples: `test-data/holidays-centre-2026-27.txt`.
 
 ### REQ-HOL-002 Bad holiday lines
 Phase: M1 · Status: agreed
-A line that is not a date, has a non-existent date, or ends before it starts is reported with its line number and the reason, is never a holiday, and does not stop the other lines.
+A line that is not a date, has a non-existent date, or ends before it starts is reported with its line number and the reason, is never a holiday, and does not stop the other lines. A period whose end is mistyped is also reported, not read as a one-day holiday (changed 2026-10-18): when the first date is followed by a range word or dash (`to`, `a`, `–`, `—`, `-`, `..`, `→`) and then a digit, the text after it must be a valid date, otherwise the line is the error `bad_end_date`. Example: `2026-12-22 to 2027-1-07 Nadal`. A dash followed by text, as in `2026-10-12 - Festa`, is still a one-day holiday with that label.
 
 ### REQ-HOL-003 Shared by the school year
 Phase: M1 · Status: agreed

@@ -9,5 +9,12 @@
   "same-date-twice.md": {"req": ["REQ-PLN-010"], "errors": [], "warnings": [], "days": 2, "hours": 2.0},
   "formats.md": {"req": ["REQ-PLN-001", "REQ-PLN-004", "REQ-PLN-006"], "timetable": "none", "errors": [], "warnings": [], "days": 4, "hours": 7.5, "code": null, "module": "Programació"},
   "outside-year.md": {"req": ["REQ-PLN-013"], "errors": [], "warnings": ["outside_year", "outside_year"], "days": 2},
-  "missing-hours.md": {"req": ["REQ-PLN-006"], "errors": [], "warnings": ["missing_hours", "no_class_weekday"], "days": 2, "hours": 2.0}
+  "missing-hours.md": {"req": ["REQ-PLN-006"], "errors": [], "warnings": ["missing_hours", "no_class_weekday"], "days": 2, "hours": 2.0},
+  "hash-in-title.md": {"req": ["REQ-PLN-001"], "errors": [], "warnings": [], "days": 1, "blocks": 1, "module": "Programació en C#", "code": null},
+  "fences.md": {"req": ["REQ-PLN-008"], "errors": [], "warnings": [], "days": 3},
+  "unclosed-fence.md": {"req": ["REQ-PLN-008"], "errors": [], "warnings": ["unclosed_fence"], "days": 1},
+  "bom-and-line-endings.md": {"req": ["REQ-PLN-015"], "errors": [], "warnings": [], "days": 2, "code": "MP01", "module": "BOM and line endings"},
+  "odd-weekdays.md": {"req": ["REQ-PLN-015", "REQ-PLN-004"], "timetable": "none", "errors": ["bad_date", "bad_date", "bad_date"], "warnings": [], "days": 1},
+  "unicode-digits.md": {"req": ["REQ-PLN-015"], "errors": ["bad_date"], "warnings": [], "days": 1, "hours": 2.0},
+  "long-lines.md": {"req": ["REQ-PLN-016"], "errors": ["multiple_modules"], "warnings": [], "days": 1, "blocks": 1}
 }
