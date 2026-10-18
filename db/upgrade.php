@@ -52,5 +52,21 @@ function xmldb_local_classprogress_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026101805, 'local', 'classprogress');
     }
 
+    if ($oldversion < 2026101806) {
+        // Plans, their days, entries, history and imports moved to the course activity mod_classprogress (decision 12).
+        // Nothing had been released, so their tables go without a copy, children first, and so do the import limits,
+        // now settings of the activity.
+        $moved = ['entry_hist', 'entry', 'planitem', 'slot', 'import', 'plan'];
+        foreach ($moved as $name) {
+            $table = new xmldb_table('local_classprogress_' . $name);
+            if ($dbman->table_exists($table)) {
+                $dbman->drop_table($table);
+            }
+        }
+        unset_config('maxplansize', 'local_classprogress');
+        unset_config('maxplandays', 'local_classprogress');
+        upgrade_plugin_savepoint(true, 2026101806, 'local', 'classprogress');
+    }
+
     return true;
 }

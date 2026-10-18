@@ -28,10 +28,8 @@ use local_classprogress\local\data_eraser;
 /**
  * Privacy provider: all data of the plugin belongs to a teacher and lives in that teacher's user context.
  *
- * A teacher owns their school years (with holidays and evaluations) and their plans (with slots, plan items, entries,
- * entry history and imports). The user who made a change and the real user behind a "log in as" are kept in the
- * owner's history as user ids: they are exported to the owner as part of that history and deleted with it, and they
- * do not make the history part of the acting user's own data.
+ * A teacher owns their school years, with their holidays and evaluation periods. Plans, entries and their history are
+ * data of the course activity mod_classprogress, which has its own provider.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -41,9 +39,6 @@ final class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
-    /** @var string[] Calendar strings for the weekdays of a slot, Monday = 0. */
-    private const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
     /**
      * Describes every table and field the plugin stores.
      *
@@ -56,14 +51,6 @@ final class provider implements
             'schoolyear' => ['userid', 'name', 'startdate', 'enddate', 'timecreated', 'timemodified'],
             'holiday' => ['schoolyearid', 'startdate', 'enddate', 'label', 'timecreated', 'timemodified'],
             'evaluation' => ['schoolyearid', 'name', 'startdate', 'enddate', 'timecreated', 'timemodified'],
-            'plan' => ['userid', 'schoolyearid', 'courseid', 'modulecode', 'moduletitle', 'startdate', 'enddate', 'status',
-                'sourcetext', 'timeapproved', 'timecreated', 'timemodified'],
-            'slot' => ['planid', 'weekday', 'hours', 'timecreated', 'timemodified'],
-            'planitem' => ['planid', 'sortorder', 'sessiondate', 'block', 'title', 'content', 'hours', 'timecreated'],
-            'entry' => ['planid', 'planitemid', 'sessiondate', 'status', 'content', 'contentformat', 'reason', 'reasonnote',
-                'measure', 'carry', 'writtenon', 'timecreated', 'timemodified'],
-            'entry_hist' => ['entryid', 'planid', 'userid', 'realuserid', 'action', 'snapshot', 'timecreated'],
-            'import' => ['planid', 'source', 'filename', 'contenthash', 'daycount', 'timecreated'],
         ];
         foreach ($tables as $name => $fields) {
             $table = 'local_classprogress_' . $name;
@@ -88,9 +75,8 @@ final class provider implements
                   FROM {context} ctx
                  WHERE ctx.contextlevel = :contextlevel
                    AND ctx.instanceid = :userid
-                   AND (EXISTS (SELECT 1 FROM {local_classprogress_schoolyear} y WHERE y.userid = :yearuserid)
-                        OR EXISTS (SELECT 1 FROM {local_classprogress_plan} p WHERE p.userid = :planuserid))";
-        $params = ['contextlevel' => CONTEXT_USER, 'userid' => $userid, 'yearuserid' => $userid, 'planuserid' => $userid];
+                   AND EXISTS (SELECT 1 FROM {local_classprogress_schoolyear} y WHERE y.userid = :yearuserid)";
+        $params = ['contextlevel' => CONTEXT_USER, 'userid' => $userid, 'yearuserid' => $userid];
 
         $contextlist = new contextlist();
         $contextlist->add_from_sql($sql, $params);
@@ -109,14 +95,12 @@ final class provider implements
             return;
         }
 
-        $sql = "SELECT userid FROM {local_classprogress_schoolyear} WHERE userid = :yearuserid
-                 UNION
-                SELECT userid FROM {local_classprogress_plan} WHERE userid = :planuserid";
-        $userlist->add_from_sql('userid', $sql, ['yearuserid' => $context->instanceid, 'planuserid' => $context->instanceid]);
+        $sql = "SELECT userid FROM {local_classprogress_schoolyear} WHERE userid = :yearuserid";
+        $userlist->add_from_sql('userid', $sql, ['yearuserid' => $context->instanceid]);
     }
 
     /**
-     * Exports everything the user owns, history included, when their own user context is approved.
+     * Exports everything the user owns when their own user context is approved.
      *
      * @param approved_contextlist $contextlist The approved contexts of one user.
      */
@@ -143,7 +127,7 @@ final class provider implements
     }
 
     /**
-     * Deletes everything the user owns, history included, when their own user context is approved.
+     * Deletes everything the user owns when their own user context is approved.
      *
      * @param approved_contextlist $contextlist The approved contexts of one user.
      */
@@ -187,7 +171,7 @@ final class provider implements
     }
 
     /**
-     * Writes the school years and plans of the owner of a user context, one subcontext each.
+     * Writes the school years of the owner of a user context, one subcontext each.
      *
      * @param \context_user $context The owner's user context.
      */
@@ -202,12 +186,6 @@ final class provider implements
         foreach ($years as $year) {
             $path = [$root, get_string('privacy:path:schoolyear', 'local_classprogress', $year->id)];
             $writer->export_data($path, self::export_schoolyear($year));
-        }
-
-        $plans = $DB->get_records('local_classprogress_plan', ['userid' => $userid], 'id');
-        foreach ($plans as $plan) {
-            $path = [$root, get_string('privacy:path:plan', 'local_classprogress', $plan->id)];
-            $writer->export_data($path, self::export_plan($plan, $years[$plan->schoolyearid] ?? null));
         }
     }
 
@@ -245,111 +223,6 @@ final class provider implements
             'holidays' => $holidays,
             'evaluations' => $evaluations,
         ]);
-    }
-
-    /**
-     * Builds the export of a plan: its fields and source text, timetable, imports, planned days with the entry of
-     * each, unplanned entries, and the whole history, including that of deleted entries.
-     *
-     * @param \stdClass $plan The plan row.
-     * @param \stdClass|null $year The plan's school year, if the owner has it.
-     * @return \stdClass The data to write.
-     */
-    private static function export_plan(\stdClass $plan, ?\stdClass $year): \stdClass {
-        global $DB;
-
-        $byplan = ['planid' => $plan->id];
-
-        $slots = [];
-        foreach ($DB->get_records('local_classprogress_slot', $byplan, 'weekday, id') as $row) {
-            $weekday = self::WEEKDAYS[(int) $row->weekday] ?? null;
-            $slots[] = (object) ([
-                'weekday' => $weekday ? get_string($weekday, 'calendar') : $row->weekday,
-                'hours' => (float) $row->hours,
-            ] + self::times($row));
-        }
-
-        $imports = [];
-        foreach ($DB->get_records('local_classprogress_import', $byplan, 'timecreated, id') as $row) {
-            $imports[] = (object) ([
-                'source' => $row->source,
-                'filename' => $row->filename,
-                'contenthash' => $row->contenthash,
-                'daycount' => (int) $row->daycount,
-            ] + self::times($row));
-        }
-
-        $entries = [];
-        foreach ($DB->get_records('local_classprogress_entry', $byplan, 'sessiondate, id') as $row) {
-            $entries[(int) $row->planitemid][] = self::export_entry($row);
-        }
-
-        $items = [];
-        foreach ($DB->get_records('local_classprogress_planitem', $byplan, 'sortorder, id') as $row) {
-            $items[] = (object) ([
-                'sortorder' => (int) $row->sortorder,
-                'sessiondate' => $row->sessiondate,
-                'block' => $row->block,
-                'title' => $row->title,
-                'content' => $row->content,
-                'hours' => $row->hours === null ? null : (float) $row->hours,
-            ] + self::times($row) + [
-                'entry' => $entries[(int) $row->id][0] ?? null,
-            ]);
-            unset($entries[(int) $row->id]);
-        }
-
-        $history = [];
-        foreach ($DB->get_records('local_classprogress_entry_hist', $byplan, 'timecreated, id') as $row) {
-            $snapshot = json_decode($row->snapshot);
-            $history[] = (object) ([
-                'entryid' => (int) $row->entryid,
-                'action' => $row->action,
-                'userid' => transform::user((int) $row->userid),
-                'realuserid' => $row->realuserid === null ? null : transform::user((int) $row->realuserid),
-                'snapshot' => $snapshot ?? $row->snapshot,
-            ] + self::times($row));
-        }
-
-        return (object) ([
-            'schoolyear' => $year ? $year->name : null,
-            'courseid' => $plan->courseid === null ? null : (int) $plan->courseid,
-            'modulecode' => $plan->modulecode,
-            'moduletitle' => $plan->moduletitle,
-            'startdate' => $plan->startdate,
-            'enddate' => $plan->enddate,
-            'status' => $plan->status,
-            'timeapproved' => $plan->timeapproved ? transform::datetime($plan->timeapproved) : null,
-        ] + self::times($plan) + [
-            'sourcetext' => $plan->sourcetext,
-            'slots' => $slots,
-            'imports' => $imports,
-            'items' => $items,
-            // Entries without a plan item, and any whose item is not in this plan.
-            'unplannedentries' => array_merge(...array_values($entries)),
-            'history' => $history,
-        ]);
-    }
-
-    /**
-     * Builds the export of an entry. The id is kept so that the history rows can be matched to it.
-     *
-     * @param \stdClass $entry The entry row.
-     * @return \stdClass The data to write.
-     */
-    private static function export_entry(\stdClass $entry): \stdClass {
-        return (object) ([
-            'id' => (int) $entry->id,
-            'sessiondate' => $entry->sessiondate,
-            'status' => $entry->status,
-            'content' => $entry->content,
-            'contentformat' => (int) $entry->contentformat,
-            'reason' => $entry->reason,
-            'reasonnote' => $entry->reasonnote,
-            'measure' => $entry->measure,
-            'carry' => transform::yesno($entry->carry),
-            'writtenon' => $entry->writtenon,
-        ] + self::times($entry));
     }
 
     /**

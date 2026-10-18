@@ -17,8 +17,7 @@
 {{!
     @template local_classprogress/index_page
 
-    The landing page: the teacher's school years, each with its plans and their number of sessions, and apart the
-    plans whose school year is missing.
+    The landing page: the teacher's school years, and every plan activity the teacher can open, across courses.
 
     Context variables required for this template:
     * addyearurl - URL of the page that creates a school year.
@@ -26,11 +25,10 @@
     * years - School years, each with:
       * name - Name as typed (escaped here).
       * dates, counts - First and last day; number of holidays and evaluation periods.
-      * editurl, deleteurl, addplanurl - URLs to edit or delete it and to add a plan to it.
-      * hasplans, plans - Its plans, each with name (as typed, escaped here), status (draft or approved), course
-        (already through format_string(), or empty), dates, sessions, hours (empty when the calendar has no dates),
-        url, candelete (false for an approved plan) and deleteurl.
-    * hasorphans, orphans - Plans whose school year is missing, each as in plans.
+      * editurl, deleteurl - URLs to edit or delete it.
+    * hasactivities - Whether the teacher can open any plan activity.
+    * activities - Plan activities, each with name and course (already through format_string()), status, pending
+      (number of pending sessions; empty for a draft) and url.
 
     Example context (json):
     {
@@ -41,23 +39,16 @@
             "dates": "2026-09-14 to 2027-06-21",
             "counts": "Holidays: 16. Evaluation periods: 3.",
             "editurl": "https://example.com/local/classprogress/schoolyear.php?id=1",
-            "deleteurl": "https://example.com/local/classprogress/schoolyear.php?id=1&action=delete",
-            "addplanurl": "https://example.com/local/classprogress/plan.php?schoolyearid=1",
-            "hasplans": true,
-            "plans": [{
-                "name": "MP 0372 · Gestió de bases de dades",
-                "status": "Approved",
-                "candelete": false,
-                "course": "DAM 1",
-                "dates": "2026-09-14 to 2027-05-24",
-                "sessions": 60,
-                "hours": "120",
-                "url": "https://example.com/local/classprogress/plan.php?id=1",
-                "deleteurl": "https://example.com/local/classprogress/plan.php?id=1&action=delete"
-            }]
+            "deleteurl": "https://example.com/local/classprogress/schoolyear.php?id=1&action=delete"
         }],
-        "hasorphans": false,
-        "orphans": []
+        "hasactivities": true,
+        "activities": [{
+            "name": "MP 0372 Bases de dades",
+            "course": "DAW 1",
+            "status": "Approved",
+            "pending": "2",
+            "url": "https://example.com/mod/classprogress/view.php?id=7"
+        }]
     }
 }}
 <div class="local_classprogress-index">
@@ -72,73 +63,37 @@
             <h3>{{name}}</h3>
             <p class="text-muted">{{dates}} · {{counts}}</p>
             <p>
-                <a class="btn btn-secondary" href="{{addplanurl}}">{{#str}} addplan, local_classprogress {{/str}}</a>
                 <a class="btn btn-link" href="{{editurl}}">{{#str}} editschoolyear, local_classprogress {{/str}}</a>
                 <a class="btn btn-link" href="{{deleteurl}}">{{#str}} deleteschoolyear, local_classprogress {{/str}}</a>
             </p>
-            {{#hasplans}}
-                <table class="generaltable">
-                    <thead>
-                        <tr>
-                            <th scope="col">{{#str}} plan, local_classprogress {{/str}}</th>
-                            <th scope="col">{{#str}} status, local_classprogress {{/str}}</th>
-                            <th scope="col">{{#str}} course {{/str}}</th>
-                            <th scope="col">{{#str}} classdays, local_classprogress {{/str}}</th>
-                            <th scope="col">{{#str}} sessions, local_classprogress {{/str}}</th>
-                            <th scope="col">{{#str}} hours, local_classprogress {{/str}}</th>
-                            <th scope="col"><span class="accesshide">{{#str}} actions {{/str}}</span></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{#plans}}
-                            <tr>
-                                <td><a href="{{url}}">{{name}}</a></td>
-                                <td>{{status}}</td>
-                                <td>{{{course}}}</td>
-                                <td>{{dates}}</td>
-                                <td>{{sessions}}</td>
-                                <td>{{hours}}</td>
-                                <td>{{#candelete}}<a href="{{deleteurl}}">{{#str}} delete {{/str}}</a>{{/candelete}}</td>
-                            </tr>
-                        {{/plans}}
-                    </tbody>
-                </table>
-            {{/hasplans}}
-            {{^hasplans}}
-                <p>{{#str}} noplans, local_classprogress {{/str}}</p>
-            {{/hasplans}}
         </section>
     {{/years}}
-    {{#hasorphans}}
-        <section class="mt-4" data-region="plans-without-schoolyear">
-            <h3>{{#str}} plansnoschoolyear, local_classprogress {{/str}}</h3>
-            <p class="text-muted">{{#str}} plansnoschoolyearintro, local_classprogress {{/str}}</p>
+    <section class="mt-4" data-region="plan-activities">
+        <h3>{{#str}} planactivities, local_classprogress {{/str}}</h3>
+        {{#hasactivities}}
             <table class="generaltable">
                 <thead>
                     <tr>
-                        <th scope="col">{{#str}} plan, local_classprogress {{/str}}</th>
-                        <th scope="col">{{#str}} status, local_classprogress {{/str}}</th>
+                        <th scope="col">{{#str}} planactivity, local_classprogress {{/str}}</th>
                         <th scope="col">{{#str}} course {{/str}}</th>
-                        <th scope="col">{{#str}} classdays, local_classprogress {{/str}}</th>
-                        <th scope="col">{{#str}} sessions, local_classprogress {{/str}}</th>
-                        <th scope="col">{{#str}} hours, local_classprogress {{/str}}</th>
-                        <th scope="col"><span class="accesshide">{{#str}} actions {{/str}}</span></th>
+                        <th scope="col">{{#str}} status, local_classprogress {{/str}}</th>
+                        <th scope="col">{{#str}} pendingsessions, local_classprogress {{/str}}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {{#orphans}}
+                    {{#activities}}
                         <tr>
-                            <td><a href="{{url}}">{{name}}</a></td>
-                            <td>{{status}}</td>
+                            <td><a href="{{url}}">{{{name}}}</a></td>
                             <td>{{{course}}}</td>
-                            <td>{{dates}}</td>
-                            <td>{{sessions}}</td>
-                            <td>{{hours}}</td>
-                            <td>{{#candelete}}<a href="{{deleteurl}}">{{#str}} delete {{/str}}</a>{{/candelete}}</td>
+                            <td>{{status}}</td>
+                            <td>{{pending}}</td>
                         </tr>
-                    {{/orphans}}
+                    {{/activities}}
                 </tbody>
             </table>
-        </section>
-    {{/hasorphans}}
+        {{/hasactivities}}
+        {{^hasactivities}}
+            <p>{{#str}} noplanactivities, local_classprogress {{/str}}</p>
+        {{/hasactivities}}
+    </section>
 </div>

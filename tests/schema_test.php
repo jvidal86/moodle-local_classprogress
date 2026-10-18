@@ -17,10 +17,7 @@
 namespace local_classprogress;
 
 /**
- * Tests for the database schema: install, upgrade, uninstall and one entry per plan item.
- *
- * The suite runs on PostgreSQL (4.5 stack) and MariaDB (5.3 stack), which is where the unique index on the nullable
- * entry.planitemid has to behave the same.
+ * Tests for the database schema: install, upgrade and uninstall. The plan tables moved to mod_classprogress.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -31,8 +28,11 @@ final class schema_test extends \advanced_testcase {
     /** @var string Prefix of every table of the plugin. */
     private const PREFIX = 'local_classprogress_';
 
-    /** @var string[] The tables of the data model in PLAN.md section 3, without the prefix. */
-    private const TABLES = ['schoolyear', 'holiday', 'evaluation', 'plan', 'slot', 'planitem', 'entry', 'entry_hist', 'import'];
+    /** @var string[] The tables of the data model in PLAN.md section 3b, without the prefix. */
+    private const TABLES = ['schoolyear', 'holiday', 'evaluation'];
+
+    /** @var string[] The tables that moved to mod_classprogress in version 2026101806, without the prefix. */
+    private const MOVED = ['entry_hist', 'entry', 'planitem', 'slot', 'import', 'plan'];
 
     /**
      * Reads the plugin's install.xml.
@@ -61,16 +61,6 @@ final class schema_test extends \advanced_testcase {
             'schoolyear' => ['schoolyear', ['id', 'userid', 'name', 'startdate', 'enddate', ...$times]],
             'holiday' => ['holiday', ['id', 'schoolyearid', 'startdate', 'enddate', 'label', ...$times]],
             'evaluation' => ['evaluation', ['id', 'schoolyearid', 'name', 'startdate', 'enddate', ...$times]],
-            'plan' => ['plan', ['id', 'userid', 'schoolyearid', 'courseid', 'modulecode', 'moduletitle', 'startdate',
-                'enddate', 'status', 'sourcetext', 'timeapproved', ...$times]],
-            'slot' => ['slot', ['id', 'planid', 'weekday', 'hours', ...$times]],
-            'planitem' => ['planitem', ['id', 'planid', 'sortorder', 'sessiondate', 'block', 'title', 'content', 'hours',
-                'timecreated']],
-            'entry' => ['entry', ['id', 'planid', 'planitemid', 'sessiondate', 'status', 'content', 'contentformat',
-                'reason', 'reasonnote', 'measure', 'carry', 'writtenon', ...$times]],
-            'entry_hist' => ['entry_hist', ['id', 'entryid', 'planid', 'userid', 'realuserid', 'action', 'snapshot',
-                'timecreated']],
-            'import' => ['import', ['id', 'planid', 'source', 'filename', 'contenthash', 'daycount', 'timecreated']],
         ];
     }
 
@@ -165,7 +155,7 @@ final class schema_test extends \advanced_testcase {
         $dbman = $DB->get_manager();
         $plugin = new \stdClass();
         require(\core_component::get_component_directory('local_classprogress') . '/version.php');
-        $missing = [self::PREFIX . 'import', self::PREFIX . 'entry_hist'];
+        $missing = [self::PREFIX . 'holiday', self::PREFIX . 'evaluation'];
         $this->getDataGenerator()->get_plugin_generator('local_classprogress')->create_schoolyear();
 
         try {
@@ -195,76 +185,43 @@ final class schema_test extends \advanced_testcase {
     }
 
     /**
-     * Several entries without a plan item (unplanned sessions) are allowed in one plan.
+     * Upgrading from the version before the course activity (2026101805) drops the plan tables that moved to
+     * mod_classprogress and the import limits that became its settings, and keeps the school years.
      *
-     * @group REQ-DAT-002
+     * @group REQ-DAT-001
+     * @group REQ-DAT-005
      */
-    public function test_entries_without_a_plan_item_are_not_limited(): void {
-        global $DB;
+    public function test_upgrade_drops_the_tables_that_moved_to_the_activity(): void {
+        global $CFG, $DB;
         $this->resetAfterTest();
-        $generator = $this->getDataGenerator()->get_plugin_generator('local_classprogress');
-        $plan = $generator->create_plan();
+        $this->preventResetByRollback();
+        require_once(\core_component::get_component_directory('local_classprogress') . '/db/upgrade.php');
+        require_once($CFG->libdir . '/upgradelib.php');
+        $dbman = $DB->get_manager();
+        foreach (self::MOVED as $name) {
+            $table = new \xmldb_table(self::PREFIX . $name);
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $dbman->create_table($table);
+        }
+        set_config('maxplansize', 100, 'local_classprogress');
+        set_config('version', 2026101805, 'local_classprogress');
+        $this->getDataGenerator()->get_plugin_generator('local_classprogress')->create_schoolyear();
 
-        foreach (['2026-09-14', '2026-09-14', '2026-09-15'] as $date) {
-            $generator->create_entry(['planid' => $plan->id, 'planitemid' => null, 'sessiondate' => $date]);
+        try {
+            $this->assertTrue(xmldb_local_classprogress_upgrade(2026101805));
+        } finally {
+            foreach (self::MOVED as $name) {
+                if ($dbman->table_exists(self::PREFIX . $name)) {
+                    $dbman->drop_table(new \xmldb_table(self::PREFIX . $name));
+                    $this->fail("Table {$name} was not dropped");
+                }
+            }
         }
 
-        $unplanned = $DB->count_records_select('local_classprogress_entry', 'planid = ? AND planitemid IS NULL', [$plan->id]);
-        $this->assertSame(3, $unplanned);
-    }
-
-    /**
-     * Each plan item can have its own entry, also next to unplanned entries.
-     *
-     * @group REQ-DAT-002
-     */
-    public function test_entries_for_different_plan_items_are_allowed(): void {
-        global $DB;
-        $this->resetAfterTest();
-        $generator = $this->getDataGenerator()->get_plugin_generator('local_classprogress');
-        $plan = $generator->create_plan();
-        $first = $generator->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-14']);
-        $second = $generator->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-14']);
-
-        $generator->create_entry(['planitemid' => $first->id]);
-        $generator->create_entry(['planitemid' => $second->id]);
-        $generator->create_entry(['planid' => $plan->id, 'planitemid' => null]);
-
-        $this->assertSame(1, $DB->count_records('local_classprogress_entry', ['planitemid' => $first->id]));
-        $this->assertSame(1, $DB->count_records('local_classprogress_entry', ['planitemid' => $second->id]));
-        $this->assertSame(3, $DB->count_records('local_classprogress_entry', ['planid' => $plan->id]));
-    }
-
-    /**
-     * A second entry for a plan item that already has one is refused by the database.
-     *
-     * @group REQ-DAT-002
-     */
-    public function test_second_entry_for_the_same_plan_item_is_refused(): void {
-        $this->resetAfterTest();
-        $generator = $this->getDataGenerator()->get_plugin_generator('local_classprogress');
-        $item = $generator->create_planitem();
-        $generator->create_entry(['planitemid' => $item->id]);
-
-        $this->expectException(\dml_write_exception::class);
-        $generator->create_entry(['planitemid' => $item->id]);
-    }
-
-    /**
-     * Moving an entry onto a plan item that already has an entry is refused by the database.
-     *
-     * @group REQ-DAT-002
-     */
-    public function test_moving_an_entry_onto_a_plan_item_with_an_entry_is_refused(): void {
-        global $DB;
-        $this->resetAfterTest();
-        $generator = $this->getDataGenerator()->get_plugin_generator('local_classprogress');
-        $plan = $generator->create_plan();
-        $first = $generator->create_planitem(['planid' => $plan->id]);
-        $generator->create_entry(['planitemid' => $first->id]);
-        $unplanned = $generator->create_entry(['planid' => $plan->id, 'planitemid' => null]);
-
-        $this->expectException(\dml_write_exception::class);
-        $DB->update_record('local_classprogress_entry', (object) ['id' => $unplanned->id, 'planitemid' => $first->id]);
+        $this->assertFalse(get_config('local_classprogress', 'maxplansize'));
+        $this->assertSame('2026101806', (string) get_config('local_classprogress', 'version'));
+        $this->assertSame([], $dbman->check_database_schema(self::install_xml(), ['extratables' => false]));
+        $this->assertSame(1, $DB->count_records(self::PREFIX . 'schoolyear'));
     }
 }

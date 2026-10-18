@@ -27,36 +27,19 @@ namespace local_classprogress\local;
  */
 final class observers_test extends \advanced_testcase {
     /**
-     * Creates one row in every table, owned by one teacher, including the kept history of a deleted entry.
+     * Creates one row in every table, owned by one teacher.
      *
      * @param \stdClass $user The owner.
      * @return array Table name without prefix => ids of the rows created in that table.
      */
     private function create_teacher_data(\stdClass $user): array {
-        global $DB;
-
         $gen = $this->getDataGenerator()->get_plugin_generator('local_classprogress');
         $year = $gen->create_schoolyear(['userid' => $user->id]);
-        $plan = $gen->create_plan(['schoolyearid' => $year->id]);
-        $item = $gen->create_planitem(['planid' => $plan->id]);
-        $entry = $gen->create_entry(['planitemid' => $item->id]);
-        $gone = $gen->create_entry(['planid' => $plan->id]);
-        $hist = [
-            $gen->create_entry_hist(['entryid' => $entry->id]),
-            $gen->create_entry_hist(['entryid' => $gone->id, 'action' => 'delete']),
-        ];
-        $DB->delete_records('local_classprogress_entry', ['id' => $gone->id]);
 
         return [
             'schoolyear' => [$year->id],
             'holiday' => [$gen->create_holiday(['schoolyearid' => $year->id])->id],
             'evaluation' => [$gen->create_evaluation(['schoolyearid' => $year->id])->id],
-            'plan' => [$plan->id],
-            'slot' => [$gen->create_slot(['planid' => $plan->id])->id],
-            'planitem' => [$item->id],
-            'entry' => [$entry->id],
-            'entry_hist' => array_column($hist, 'id'),
-            'import' => [$gen->create_import(['planid' => $plan->id])->id],
         ];
     }
 
@@ -78,7 +61,7 @@ final class observers_test extends \advanced_testcase {
     }
 
     /**
-     * Deleting a teacher's account removes all of their rows, history included, and keeps another teacher's.
+     * Deleting a teacher's account removes all of their rows and keeps another teacher's.
      *
      * @group REQ-PRV-004
      */

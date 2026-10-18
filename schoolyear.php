@@ -57,17 +57,8 @@ if ($year && $action === 'delete') {
     $PAGE->navbar->add($title);
     echo $OUTPUT->header();
     echo $OUTPUT->heading($title);
-    if (schoolyear_service::count_plans($USER->id, $id) > 0) {
-        echo $OUTPUT->notification(
-            get_string('deleteschoolyearhasplans', 'local_classprogress', $name),
-            notification::NOTIFY_WARNING,
-            false
-        );
-        echo $OUTPUT->continue_button($indexurl);
-    } else {
-        $confirmurl = new \core\url($url, ['action' => 'delete', 'confirm' => 1, 'sesskey' => sesskey()]);
-        echo $OUTPUT->confirm(get_string('deleteschoolyearconfirm', 'local_classprogress', $name), $confirmurl, $indexurl);
-    }
+    $confirmurl = new \core\url($url, ['action' => 'delete', 'confirm' => 1, 'sesskey' => sesskey()]);
+    echo $OUTPUT->confirm(get_string('deleteschoolyearconfirm', 'local_classprogress', $name), $confirmurl, $indexurl);
     echo $OUTPUT->footer();
     exit;
 }
@@ -77,7 +68,7 @@ $PAGE->set_title($title);
 $PAGE->navbar->add($title);
 
 $evaluations = $year ? schoolyear_service::evaluations($USER->id, $id) : [];
-$form = new schoolyear_form($url, ['evaluationcount' => count($evaluations), 'userid' => (int) $USER->id]);
+$form = new schoolyear_form($url, ['evaluationcount' => count($evaluations)]);
 $stale = false;
 if ($form->is_cancelled()) {
     redirect($indexurl);

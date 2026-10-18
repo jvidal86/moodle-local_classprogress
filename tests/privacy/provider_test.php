@@ -25,9 +25,8 @@ use core_privacy\local\request\writer;
 /**
  * Tests for the privacy provider: metadata, export and the three ways of deleting a teacher's data.
  *
- * Every test sets up two teachers who each own a school year with a holiday and an evaluation, and a plan with a
- * slot, items, entries, history (including the history of a deleted entry and a change made by an admin logged in as
- * the teacher) and an import, so each test also checks that the other teacher's data is left alone.
+ * Every test sets up two teachers who each own a school year with a holiday and an evaluation, so each test also
+ * checks that the other teacher's data is left alone. Plans, entries and history are mod_classprogress's.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -44,52 +43,20 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      *
      * @param \stdClass $user The owner.
      * @param string $name Short name used in the free text, so each owner's text can be told apart.
-     * @return array Table name without prefix => ids of the rows created in that table, plus 'gone' => the id of the
-     *     deleted entry whose history is kept.
+     * @return array Table name without prefix => ids of the rows created in that table.
      */
     private function create_teacher_data(\stdClass $user, string $name): array {
-        global $DB;
-
         $gen = $this->getDataGenerator()->get_plugin_generator(self::COMPONENT);
-        $admin = get_admin();
 
         $year = $gen->create_schoolyear(['userid' => $user->id, 'name' => "Year of {$name}"]);
         $holiday = $gen->create_holiday(['schoolyearid' => $year->id, 'startdate' => '2026-12-23',
             'enddate' => '2027-01-06', 'label' => "Christmas of {$name}"]);
         $evaluation = $gen->create_evaluation(['schoolyearid' => $year->id, 'name' => "First term of {$name}"]);
-        $plan = $gen->create_plan(['schoolyearid' => $year->id, 'modulecode' => 'MP 0372',
-            'moduletitle' => "Databases of {$name}", 'sourcetext' => "# MP 0372 · Databases of {$name}\n"]);
-        $slot = $gen->create_slot(['planid' => $plan->id, 'weekday' => 0, 'hours' => 2]);
-        $item1 = $gen->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-14',
-            'content' => "Planned day 1 of {$name}"]);
-        $item2 = $gen->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-18',
-            'content' => "Planned day 2 of {$name}"]);
-        $entry = $gen->create_entry(['planitemid' => $item1->id, 'content' => "Done by {$name}, Anna was absent",
-            'carry' => 1]);
-        $unplanned = $gen->create_entry(['planid' => $plan->id, 'sessiondate' => '2026-09-21',
-            'content' => "Extra session of {$name}"]);
-        $gone = $gen->create_entry(['planitemid' => $item2->id, 'content' => "Deleted entry of {$name}"]);
-        $hist = [
-            $gen->create_entry_hist(['entryid' => $entry->id]),
-            $gen->create_entry_hist(['entryid' => $entry->id, 'action' => 'update', 'realuserid' => $admin->id]),
-            $gen->create_entry_hist(['entryid' => $unplanned->id]),
-            $gen->create_entry_hist(['entryid' => $gone->id]),
-            $gen->create_entry_hist(['entryid' => $gone->id, 'action' => 'delete']),
-        ];
-        $DB->delete_records('local_classprogress_entry', ['id' => $gone->id]);
-        $import = $gen->create_import(['planid' => $plan->id, 'daycount' => 2]);
 
         return [
             'schoolyear' => [$year->id],
             'holiday' => [$holiday->id],
             'evaluation' => [$evaluation->id],
-            'plan' => [$plan->id],
-            'slot' => [$slot->id],
-            'planitem' => [$item1->id, $item2->id],
-            'entry' => [$entry->id, $unplanned->id],
-            'entry_hist' => array_column($hist, 'id'),
-            'import' => [$import->id],
-            'gone' => $gone->id,
         ];
     }
 
@@ -102,7 +69,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     private static function rows_left(array $ids): array {
         global $DB;
 
-        unset($ids['gone']);
         $left = [];
         foreach ($ids as $table => $tableids) {
             [$insql, $params] = $DB->get_in_or_equal($tableids);
@@ -127,7 +93,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
      * @param array $ids Rows as returned by create_teacher_data().
      */
     private function assert_all_kept(array $ids): void {
-        unset($ids['gone']);
         $this->assertSame(array_map('count', $ids), self::rows_left($ids));
     }
 
@@ -176,19 +141,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         ksort($expected);
         ksort($described);
 
-        $this->assertCount(9, $expected);
+        $this->assertCount(3, $expected);
         $this->assertSame($expected, $described);
-    }
-
-    /**
-     * The metadata warns that entry text and history may name students.
-     *
-     * @group REQ-PRV-001
-     */
-    public function test_metadata_warns_that_free_text_may_name_students(): void {
-        foreach (['local_classprogress_entry', 'local_classprogress_entry_hist'] as $table) {
-            $this->assertStringContainsString('students', get_string('privacy:metadata:' . $table, self::COMPONENT));
-        }
     }
 
     /**
@@ -211,8 +165,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertSame([(int) \context_user::instance($teacher1->id)->id], $contextids($teacher1->id));
         $this->assertSame([(int) \context_user::instance($yearonly->id)->id], $contextids($yearonly->id));
         $this->assertSame([], $contextids($nobody->id));
-        // The admin who changed an entry while logged in as a teacher owns nothing here.
-        $this->assertSame([], $contextids(get_admin()->id));
     }
 
     /**
@@ -238,8 +190,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * The export holds the teacher's school year with holidays and evaluations, and the plan with its source text,
-     * timetable, items, entries, imports and the whole history, including that of a deleted entry.
+     * The export holds the teacher's school year with its holidays and evaluations.
      *
      * @group REQ-PRV-002
      */
@@ -252,7 +203,6 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $context = \context_user::instance($teacher1->id);
         $root = get_string('pluginname', self::COMPONENT);
         $yearpath = [$root, get_string('privacy:path:schoolyear', self::COMPONENT, $ids['schoolyear'][0])];
-        $planpath = [$root, get_string('privacy:path:plan', self::COMPONENT, $ids['plan'][0])];
 
         $writer = writer::with_context($context);
         $this->assertFalse($writer->has_any_data());
@@ -270,38 +220,9 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assertCount(1, $year->evaluations);
         $this->assertSame('First term of T1', $year->evaluations[0]->name);
 
-        $plan = $writer->get_data($planpath);
-        $this->assertSame('Year of T1', $plan->schoolyear);
-        $this->assertSame('MP 0372', $plan->modulecode);
-        $this->assertSame('Databases of T1', $plan->moduletitle);
-        $this->assertSame('draft', $plan->status);
-        $this->assertSame("# MP 0372 · Databases of T1\n", $plan->sourcetext);
-        $this->assertCount(1, $plan->slots);
-        $this->assertSame(get_string('monday', 'calendar'), $plan->slots[0]->weekday);
-        $this->assertEquals(2, $plan->slots[0]->hours);
-        $this->assertCount(1, $plan->imports);
-        $this->assertSame(2, (int) $plan->imports[0]->daycount);
-
-        $this->assertCount(2, $plan->items);
-        $this->assertSame('Planned day 1 of T1', $plan->items[0]->content);
-        $this->assertSame('Done by T1, Anna was absent', $plan->items[0]->entry->content);
-        $this->assertSame(get_string('yes'), $plan->items[0]->entry->carry);
-        $this->assertSame('Planned day 2 of T1', $plan->items[1]->content);
-        $this->assertNull($plan->items[1]->entry);
-        $this->assertCount(1, $plan->unplannedentries);
-        $this->assertSame('Extra session of T1', $plan->unplannedentries[0]->content);
-
-        $this->assertCount(5, $plan->history);
-        $actions = array_map(fn($row) => [$row->entryid, $row->action], $plan->history);
-        $this->assertContains([(int) $ids['gone'], 'delete'], $actions);
-        $loggedinas = array_values(array_filter($plan->history, fn($row) => $row->realuserid !== null));
-        $this->assertCount(1, $loggedinas);
-        $this->assertSame((int) get_admin()->id, $loggedinas[0]->realuserid);
-        $this->assertSame((int) $teacher1->id, $loggedinas[0]->userid);
-        $this->assertSame('Done by T1, Anna was absent', $loggedinas[0]->snapshot->content);
-
         // Nothing of the other teacher is exported, here or in their own context.
-        $this->assertSame([], $writer->get_data([$root, get_string('privacy:path:plan', self::COMPONENT, $other['plan'][0])]));
+        $otherpath = [$root, get_string('privacy:path:schoolyear', self::COMPONENT, $other['schoolyear'][0])];
+        $this->assertSame([], $writer->get_data($otherpath));
         $this->assertFalse(writer::with_context(\context_user::instance($teacher2->id))->has_any_data());
     }
 
@@ -350,7 +271,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
     }
 
     /**
-     * Deleting a user's data in their approved contexts removes all their rows, history included, and only theirs.
+     * Deleting a user's data in their approved contexts removes all their rows, and only theirs.
      *
      * @group REQ-PRV-003
      */
@@ -412,27 +333,5 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->assert_all_kept($ids2);
         $this->assertSame([], self::users_in($context1));
         $this->assertSame([(int) $teacher2->id], self::users_in(\context_user::instance($teacher2->id)));
-    }
-
-    /**
-     * Erasing the admin who changed an entry while logged in as a teacher keeps the teacher's history as it is.
-     *
-     * @group REQ-PRV-003
-     */
-    public function test_erasing_the_logged_in_as_user_keeps_the_owners_history(): void {
-        global $DB;
-
-        $this->resetAfterTest();
-        $teacher = $this->getDataGenerator()->create_user();
-        $ids = $this->create_teacher_data($teacher, 'T1');
-        $admin = get_admin();
-        $admincontext = \context_user::instance($admin->id);
-
-        provider::delete_data_for_user(new approved_contextlist($admin, self::COMPONENT, [$admincontext->id]));
-        provider::delete_data_for_users(new approved_userlist($admincontext, self::COMPONENT, [$admin->id]));
-        provider::delete_data_for_all_users_in_context($admincontext);
-
-        $this->assert_all_kept($ids);
-        $this->assertSame(1, $DB->count_records('local_classprogress_entry_hist', ['realuserid' => $admin->id]));
     }
 }

@@ -16,11 +16,12 @@
 
 namespace local_classprogress\output;
 
-use local_classprogress\local\plan_service;
 use local_classprogress\local\schoolyear_service;
 
 /**
- * Tests for the landing page: what it shows of the teacher's school years and plans.
+ * Tests for the landing page: what it shows of the teacher's school years and plan activities.
+ *
+ * The plan activities come from mod_classprogress, whose own tests check what it lists; here they are given to the page.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -41,99 +42,69 @@ final class index_page_test extends \advanced_testcase {
     }
 
     /**
-     * Creates a school year and a plan in it through the services.
+     * Renders a landing page.
      *
-     * @param int $userid Owner.
-     * @param string $name School year name.
-     * @param string $code Module code.
-     * @param string $title Module title.
-     * @return int[] School year id and plan id.
-     */
-    private static function year_and_plan(int $userid, string $name, string $code, string $title): array {
-        $yearid = schoolyear_service::create($userid, (object) [
-            'name' => $name,
-            'startdate' => '2026-09-14',
-            'enddate' => '2027-06-21',
-        ]);
-        $planid = plan_service::create($userid, (object) [
-            'schoolyearid' => $yearid,
-            'modulecode' => $code,
-            'moduletitle' => $title,
-            'startdate' => '2026-09-14',
-            'enddate' => '2026-09-25',
-            'timetable' => [0 => 2],
-        ]);
-        return [$yearid, $planid];
-    }
-
-    /**
-     * Renders the landing page of a user.
-     *
-     * @param int $userid The user.
+     * @param index_page $page The page.
      * @return string HTML.
      */
-    private static function render(int $userid): string {
+    private static function render(index_page $page): string {
         global $PAGE;
 
-        return $PAGE->get_renderer('core')->render(index_page::for_user($userid));
+        return $PAGE->get_renderer('core')->render($page);
     }
 
     /**
-     * Names with <, > and & are shown as typed, escaped, never as markup.
+     * School year names with <, > and & are shown as typed, escaped, never as markup.
      *
      * @group REQ-DAT-004
      */
     public function test_names_are_shown_as_typed_and_escaped(): void {
         $this->resetAfterTest();
         $user = $this->teacher();
-        self::year_and_plan($user->id, 'Curs <b>2026</b> & co', 'MP<03>', 'Programació <C++> i Java');
+        schoolyear_service::create($user->id, (object) [
+            'name' => 'Curs <b>2026</b> & co',
+            'startdate' => '2026-09-14',
+            'enddate' => '2027-06-21',
+        ]);
 
-        $html = self::render($user->id);
+        $html = self::render(index_page::for_user($user->id));
 
         $this->assertStringContainsString('Curs &lt;b&gt;2026&lt;/b&gt; &amp; co', $html);
-        $this->assertStringContainsString('MP&lt;03&gt; · Programació &lt;C++&gt; i Java', $html);
         $this->assertStringNotContainsString('<b>2026', $html);
-        $this->assertStringNotContainsString('<C++>', $html);
     }
 
     /**
-     * The hidden column heading uses a class that exists on Moodle 4.5 (Bootstrap 4) and on 5.x (Bootstrap 5).
-     */
-    public function test_hidden_text_uses_a_class_of_both_versions(): void {
-        $this->resetAfterTest();
-        $user = $this->teacher();
-        self::year_and_plan($user->id, 'Curs 2026-2027', 'MP 0372', 'Gestió de bases de dades');
-
-        $html = self::render($user->id);
-
-        $this->assertStringContainsString('<span class="accesshide">', $html);
-        $this->assertStringNotContainsString('sr-only', $html);
-    }
-
-    /**
-     * A plan whose school year is missing does not break the page: it is listed apart, with its delete link.
+     * The plan activities are listed with their course, status and pending sessions, linking to each; without any,
+     * the page says how to make one.
      *
-     * @group REQ-DAT-006
+     * @group REQ-MOD-005
      */
-    public function test_a_plan_without_its_school_year_is_listed_apart(): void {
-        global $DB, $PAGE;
-
+    public function test_plan_activities_are_listed_with_course_status_and_pending_sessions(): void {
         $this->resetAfterTest();
         $user = $this->teacher();
-        [$yearid, $planid] = self::year_and_plan($user->id, 'Curs perdut', 'MP 0372', 'Gestió de bases de dades');
-        self::year_and_plan($user->id, 'Curs 2026-2027', 'MP 0374', 'Programació');
-        $DB->delete_records('local_classprogress_schoolyear', ['id' => $yearid]);
+        $activity = [
+            'name' => 'MP 0372 &amp; co',
+            'course' => 'DAW 1',
+            'status' => 'Approved',
+            'pending' => 3,
+            'url' => 'https://example.com/mod/classprogress/view.php?id=7',
+        ];
+        $draft = ['name' => 'MP 0374', 'course' => 'DAW 2', 'status' => 'Draft', 'pending' => null,
+            'url' => 'https://example.com/mod/classprogress/view.php?id=8'];
 
-        $context = index_page::for_user($user->id)->export_for_template($PAGE->get_renderer('core'));
-        $html = self::render($user->id);
+        $context = (new index_page([], [$activity, $draft]))->export_for_template($GLOBALS['PAGE']->get_renderer('core'));
+        $html = self::render(new index_page([], [$activity, $draft]));
+        $empty = self::render(new index_page([], []));
 
-        $this->assertTrue($context->hasyears);
-        $this->assertSame(['Curs 2026-2027'], array_column($context->years, 'name'));
-        $this->assertTrue($context->hasorphans);
-        $this->assertSame(['MP 0372 · Gestió de bases de dades'], array_column($context->orphans, 'name'));
-        $deleteurl = new \moodle_url('/local/classprogress/plan.php', ['id' => $planid, 'action' => 'delete']);
-        $this->assertSame($deleteurl->out(false), $context->orphans[0]['deleteurl']);
-        $this->assertStringContainsString(get_string('plansnoschoolyear', 'local_classprogress'), $html);
-        $this->assertStringContainsString('MP 0372 · Gestió de bases de dades', $html);
+        $this->assertTrue($context->hasactivities);
+        $this->assertSame(['3', ''], array_column($context->activities, 'pending'));
+        $this->assertStringContainsString(
+            '<a href="https://example.com/mod/classprogress/view.php?id=7">MP 0372 &amp; co</a>',
+            $html
+        );
+        $this->assertStringContainsString('DAW 1', $html);
+        $this->assertStringContainsString('Approved', $html);
+        $this->assertStringContainsString(get_string('noplanactivities', 'local_classprogress'), $empty);
+        $this->assertStringNotContainsString(get_string('noplanactivities', 'local_classprogress'), $html);
     }
 }

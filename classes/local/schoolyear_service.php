@@ -21,20 +21,22 @@ namespace local_classprogress\local;
  *
  * Every method that takes the acting user first checks, live, that the user may use the plugin (access::qualifies()),
  * and then reaches only that user's rows: a missing id and another user's id give the same exception, error_notfound.
- * The holidays of a school year apply to all of its plans. They are stored one row per holiday line, and holiday text
- * with a line that cannot be read is refused as a whole, so no bad line is ever stored and the teacher keeps the text
- * to correct it. A school year that still has plans is not deleted. Dates are ISO yyyy-mm-dd strings.
+ * The holidays of a school year apply to all of its plan activities until each is approved. They are stored one row
+ * per holiday line, and holiday text with a line that cannot be read is refused as a whole, so no bad line is ever
+ * stored and the teacher keeps the text to correct it. Dates are ISO yyyy-mm-dd strings.
  *
  * School year data, as taken by validate(), create() and update(): name, startdate, enddate; optionally holidays (the
  * holiday text) and evaluations (a list of objects or arrays with name, startdate and enddate). On update, data without
  * holidays or evaluations leaves them as they are (the stored evaluation periods must still fit the new dates), and data
  * with timemodified, the version the change was made from, is refused when the stored school year is newer. Every date
- * lies within dates::FIRST_DAY to dates::LAST_DAY, and a school year is at most dates::MAX_DAYS long. New dates must keep
- * inside the school year the first and last class day of each of its plans and every day of its approved plans, where
- * they lay inside it before (a day already outside, a warning the teacher confirmed, does not block a change).
+ * lies within dates::FIRST_DAY to dates::LAST_DAY, and a school year is at most dates::MAX_DAYS long.
  *
- * Changing or deleting a school year, and creating or moving a plan into it, hold the school year's lock (lock()), so
- * no plan is ever left in a school year that was deleted at the same moment.
+ * The plan activities of mod_classprogress use a school year through find(), holidays_of() and evaluations_of(), which
+ * check nobody's access: the activity checks its own capabilities and only ever reads the school year it was given by
+ * that school year's owner. Deleting a school year leaves the activities that used it: an approved plan keeps its own
+ * copy, and a draft asks for another school year (REQ-DAT-006). Changing or deleting a school year, and creating or
+ * moving a plan activity into it, hold the school year's lock (lock()), so no activity is ever created in a school
+ * year that was deleted at the same moment.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -117,7 +119,7 @@ final class schoolyear_service {
             self::require_current($year, $data);
             $check = clone $data;
             $check->evaluations ??= array_values(self::evaluations($userid, $id));
-            self::require_valid($check, $userid, $id);
+            self::require_valid($check);
             self::write($id, $data, max(time(), (int) $year->timemodified + 1));
         } finally {
             $lock->release();
@@ -125,12 +127,12 @@ final class schoolyear_service {
     }
 
     /**
-     * Deletes a school year with its holidays and evaluation periods. A school year that has plans is kept.
+     * Deletes a school year with its holidays and evaluation periods.
      *
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound, error_schoolyearhasplans, or locktimeout.
+     * @throws \moodle_exception error_notfound, or locktimeout.
      */
     public static function delete(int $userid, int $id): void {
         global $DB;
@@ -139,9 +141,6 @@ final class schoolyear_service {
         self::own($userid, $id);
         $lock = self::lock($id);
         try {
-            if (self::plan_count($userid, $id) > 0) {
-                throw new \moodle_exception('error_schoolyearhasplans', 'local_classprogress');
-            }
             self::in_transaction(function () use ($DB, $id): void {
                 $DB->delete_records(self::HOLIDAY, ['schoolyearid' => $id]);
                 $DB->delete_records(self::EVALUATION, ['schoolyearid' => $id]);
@@ -153,7 +152,7 @@ final class schoolyear_service {
     }
 
     /**
-     * Takes the lock of a school year: changing or deleting it, and creating or moving a plan into it, hold it.
+     * Takes the lock of a school year: changing or deleting it, and creating or moving a plan activity into it, hold it.
      *
      * @param int $id School year id.
      * @return \core\lock\lock The lock; the caller releases it.
@@ -206,15 +205,9 @@ final class schoolyear_service {
      * @throws \moodle_exception error_notfound.
      */
     public static function holidays(int $userid, int $id): array {
-        global $DB;
-
         self::require_access($userid);
         self::own($userid, $id);
-        $entries = [];
-        foreach ($DB->get_records(self::HOLIDAY, ['schoolyearid' => $id], 'id') as $row) {
-            $entries[$row->id] = new holiday_entry(count($entries) + 1, $row->startdate, $row->enddate, $row->label);
-        }
-        return $entries;
+        return self::holidays_of($id);
     }
 
     /**
@@ -227,26 +220,49 @@ final class schoolyear_service {
      * @throws \moodle_exception error_notfound.
      */
     public static function evaluations(int $userid, int $id): array {
-        global $DB;
-
         self::require_access($userid);
         self::own($userid, $id);
-        return $DB->get_records(self::EVALUATION, ['schoolyearid' => $id], 'startdate, id');
+        return self::evaluations_of($id);
     }
 
     /**
-     * Counts the plans of a school year.
+     * Returns a school year by id, for the plan activity that uses it; no access check (see the class description).
      *
-     * @param int $userid The acting user.
      * @param int $id School year id.
-     * @return int Number of plans.
-     * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound.
+     * @return \stdClass|null The school year row; null when it does not exist.
      */
-    public static function count_plans(int $userid, int $id): int {
-        self::require_access($userid);
-        self::own($userid, $id);
-        return self::plan_count($userid, $id);
+    public static function find(int $id): ?\stdClass {
+        global $DB;
+
+        return $DB->get_record(self::YEAR, ['id' => $id]) ?: null;
+    }
+
+    /**
+     * Returns the holidays of a school year, for the plan activity that uses it; no access check.
+     *
+     * @param int $id School year id.
+     * @return holiday_entry[] Holidays keyed by holiday id, as holidays() gives them; none for a missing school year.
+     */
+    public static function holidays_of(int $id): array {
+        global $DB;
+
+        $entries = [];
+        foreach ($DB->get_records(self::HOLIDAY, ['schoolyearid' => $id], 'id') as $row) {
+            $entries[$row->id] = new holiday_entry(count($entries) + 1, $row->startdate, $row->enddate, $row->label);
+        }
+        return $entries;
+    }
+
+    /**
+     * Returns the evaluation periods of a school year, for the plan activity that uses it; no access check.
+     *
+     * @param int $id School year id.
+     * @return \stdClass[] Evaluation rows keyed by id, in date order; none for a missing school year.
+     */
+    public static function evaluations_of(int $id): array {
+        global $DB;
+
+        return $DB->get_records(self::EVALUATION, ['schoolyearid' => $id], 'startdate, id');
     }
 
     /**
@@ -301,11 +317,9 @@ final class schoolyear_service {
      * evaluation under key N of the evaluations array.
      *
      * @param \stdClass $data School year data (see the class description).
-     * @param int $userid The acting user, when the data changes a stored school year.
-     * @param int $id The stored school year the data changes, whose plans must stay inside the new dates; 0 for none.
      * @return string[] Field => lang string id of the error, in field order; empty when the data is valid.
      */
-    public static function validate(\stdClass $data, int $userid = 0, int $id = 0): array {
+    public static function validate(\stdClass $data): array {
         $errors = [];
         if (!self::is_name((string) ($data->name ?? ''), self::MAX_NAME)) {
             $errors['name'] = 'error_name';
@@ -319,8 +333,6 @@ final class schoolyear_service {
                 $errors['enddate'] = 'error_endbeforestart';
             } else if ($range === dates::TOO_LONG) {
                 $errors['enddate'] = 'error_yeartoolong';
-            } else if ($id) {
-                $errors += self::plan_date_errors($userid, $id, $start, $end);
             }
         }
         if (isset($data->holidays)) {
@@ -421,52 +433,13 @@ final class schoolyear_service {
     }
 
     /**
-     * Checks that new dates of a stored school year keep its plans' dates inside, where they lay inside before: the
-     * first and last class day of every plan, and every day of an approved plan.
-     *
-     * @param int $userid The acting user.
-     * @param int $id School year id.
-     * @param string $start New first day, a valid date.
-     * @param string $end New last day, a valid date.
-     * @return string[] startdate and enddate => error_yearexcludesplans, for the ends that would leave a date out.
-     */
-    private static function plan_date_errors(int $userid, int $id, string $start, string $end): array {
-        global $DB;
-
-        $year = $DB->get_record(self::YEAR, ['id' => $id, 'userid' => $userid]);
-        if (!$year) {
-            return [];
-        }
-        $dates = [];
-        foreach ($DB->get_records('local_classprogress_plan', ['schoolyearid' => $id, 'userid' => $userid]) as $plan) {
-            array_push($dates, (string) $plan->startdate, (string) $plan->enddate);
-        }
-        $sql = 'SELECT DISTINCT i.sessiondate
-                  FROM {local_classprogress_planitem} i
-                  JOIN {local_classprogress_plan} p ON p.id = i.planid
-                 WHERE p.schoolyearid = :yearid AND p.userid = :userid AND p.status = :status';
-        $params = ['yearid' => $id, 'userid' => $userid, 'status' => plan_service::STATUS_APPROVED];
-        $dates = array_merge($dates, $DB->get_fieldset_sql($sql, $params));
-        $out = ['startdate' => false, 'enddate' => false];
-        foreach ($dates as $date) {
-            if (dates::is_date($date) && dates::within($date, $year->startdate, $year->enddate)) {
-                $out['startdate'] = $out['startdate'] || dates::day_number($date) < dates::day_number($start);
-                $out['enddate'] = $out['enddate'] || dates::day_number($date) > dates::day_number($end);
-            }
-        }
-        return array_map(fn(): string => 'error_yearexcludesplans', array_filter($out));
-    }
-
-    /**
      * Throws the first validation error, if there is one.
      *
      * @param \stdClass $data School year data.
-     * @param int $userid The acting user.
-     * @param int $id The stored school year the data changes; 0 for a new one.
      * @throws \moodle_exception With the lang string id of the first error.
      */
-    private static function require_valid(\stdClass $data, int $userid = 0, int $id = 0): void {
-        $errors = self::validate($data, $userid, $id);
+    private static function require_valid(\stdClass $data): void {
+        $errors = self::validate($data);
         if ($errors) {
             throw new \moodle_exception(reset($errors), 'local_classprogress');
         }
@@ -482,19 +455,6 @@ final class schoolyear_service {
         if (!access::qualifies($userid)) {
             throw new \required_capability_exception(\context_system::instance(), access::CAPABILITY, 'nopermissions', '');
         }
-    }
-
-    /**
-     * Counts the plans of a school year of the user.
-     *
-     * @param int $userid The acting user.
-     * @param int $id School year id, already checked to be the user's.
-     * @return int Number of plans.
-     */
-    private static function plan_count(int $userid, int $id): int {
-        global $DB;
-
-        return $DB->count_records('local_classprogress_plan', ['schoolyearid' => $id, 'userid' => $userid]);
     }
 
     /**

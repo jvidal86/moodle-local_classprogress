@@ -389,7 +389,7 @@ final class schoolyear_service_test extends \advanced_testcase {
     }
 
     /**
-     * Deleting a school year without plans removes it with its holidays and evaluations, and nothing else.
+     * Deleting a school year removes it with its holidays and evaluations, and nothing else.
      */
     public function test_delete_removes_the_year_with_its_holidays_and_evaluations(): void {
         global $DB;
@@ -408,25 +408,28 @@ final class schoolyear_service_test extends \advanced_testcase {
     }
 
     /**
-     * A school year that has plans is not deleted: its plans must be deleted first.
+     * The plan activities read a school year, its holidays and its evaluation periods by id, whoever owns it; a missing
+     * school year gives nothing.
+     *
+     * @group REQ-HOL-003
+     * @group REQ-DAT-006
      */
-    public function test_delete_refuses_a_year_with_plans(): void {
-        global $DB;
-
+    public function test_activities_read_a_school_year_by_id(): void {
         $this->resetAfterTest();
         $user = $this->teacher();
         $id = schoolyear_service::create($user->id, self::yeardata());
-        $this->generator()->create_plan(['schoolyearid' => $id]);
+        $this->setUser(null);
 
-        try {
-            schoolyear_service::delete($user->id, $id);
-            $this->fail('Expected an exception');
-        } catch (\moodle_exception $e) {
-            $this->assertSame('error_schoolyearhasplans', $e->errorcode);
-        }
-        $this->assertTrue($DB->record_exists('local_classprogress_schoolyear', ['id' => $id]));
-        $this->assertSame(2, $DB->count_records('local_classprogress_holiday', ['schoolyearid' => $id]));
-        $this->assertSame(1, schoolyear_service::count_plans($user->id, $id));
+        $this->assertSame('2026-09-14', schoolyear_service::find($id)->startdate);
+        $holidays = array_values(schoolyear_service::holidays_of($id));
+        $this->assertCount(2, $holidays);
+        $this->assertSame([1, 2], array_map(fn(holiday_entry $h): int => $h->line, $holidays));
+        $owned = schoolyear_service::holidays($user->id, $id);
+        $this->assertSame(array_keys($owned), array_keys(schoolyear_service::holidays_of($id)));
+        $this->assertCount(count(schoolyear_service::evaluations($user->id, $id)), schoolyear_service::evaluations_of($id));
+        $this->assertNull(schoolyear_service::find($id + 1000));
+        $this->assertSame([], schoolyear_service::holidays_of($id + 1000));
+        $this->assertSame([], schoolyear_service::evaluations_of($id + 1000));
     }
 
     /**
@@ -508,72 +511,6 @@ final class schoolyear_service_test extends \advanced_testcase {
         $this->assertSame([], schoolyear_service::validate($year('2000-01-01', '2000-12-31')));
         $this->assertSame([], schoolyear_service::validate($year('2099-01-01', '2099-12-31')));
         $this->assertSame([], schoolyear_service::validate($year('2026-09-01', '2027-10-05')));
-    }
-
-    /**
-     * A school year cannot shrink past the class days of its plans: the first and last class day of any plan, and the
-     * days of an approved plan, must stay inside it. The form gets the same answer from validate().
-     *
-     * @group REQ-CAL-004
-     * @group REQ-LCK-004
-     */
-    public function test_shrinking_a_year_keeps_the_dates_of_its_plans_inside(): void {
-        $this->resetAfterTest();
-        $user = $this->teacher();
-        $id = schoolyear_service::create($user->id, self::yeardata(['evaluations' => []]));
-        $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => '2026-10-01', 'enddate' => '2027-05-24']);
-        $approved = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null,
-            'status' => 'approved']);
-        $this->generator()->create_planitem(['planid' => $approved->id, 'sessiondate' => '2026-09-21']);
-        $this->generator()->create_planitem(['planid' => $approved->id, 'sessiondate' => '2027-06-07']);
-        $draft = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null]);
-        $this->generator()->create_planitem(['planid' => $draft->id, 'sessiondate' => '2026-09-14']);
-        $data = fn(string $start, string $end): \stdClass => self::yeardata(['startdate' => $start, 'enddate' => $end,
-            'holidays' => '', 'evaluations' => []]);
-        $refused = [
-            ['2026-09-14', '2027-05-23', 'enddate'],
-            ['2026-10-02', '2027-06-21', 'startdate'],
-            ['2026-09-22', '2027-06-21', 'startdate'],
-            ['2026-09-14', '2027-06-06', 'enddate'],
-        ];
-
-        foreach ($refused as [$start, $end, $field]) {
-            $errors = schoolyear_service::validate($data($start, $end), $user->id, $id);
-            $this->assertSame([$field => 'error_yearexcludesplans'], $errors);
-            try {
-                schoolyear_service::update($user->id, $id, $data($start, $end));
-                $this->fail('Expected an exception');
-            } catch (\moodle_exception $e) {
-                $this->assertSame('error_yearexcludesplans', $e->errorcode);
-            }
-            $year = schoolyear_service::get($user->id, $id);
-            $this->assertSame(['2026-09-14', '2027-06-21'], [$year->startdate, $year->enddate]);
-        }
-
-        schoolyear_service::update($user->id, $id, $data('2026-09-21', '2027-06-07'));
-        $this->assertSame('2026-09-21', schoolyear_service::get($user->id, $id)->startdate);
-        $this->assertSame('2027-06-07', schoolyear_service::get($user->id, $id)->enddate);
-    }
-
-    /**
-     * A day of an approved plan that already lay outside the school year (a warning the teacher confirmed) does not
-     * block other changes to it.
-     *
-     * @group REQ-CAL-004
-     */
-    public function test_a_day_already_outside_the_year_does_not_block_changes(): void {
-        $this->resetAfterTest();
-        $user = $this->teacher();
-        $id = schoolyear_service::create($user->id, self::yeardata(['evaluations' => []]));
-        $plan = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null,
-            'status' => 'approved']);
-        $this->generator()->create_planitem(['planid' => $plan->id, 'sessiondate' => '2027-07-01']);
-
-        schoolyear_service::update($user->id, $id, self::yeardata(['name' => 'Renamed', 'enddate' => '2027-06-14',
-            'evaluations' => []]));
-
-        $this->assertSame('Renamed', schoolyear_service::get($user->id, $id)->name);
-        $this->assertSame('2027-06-14', schoolyear_service::get($user->id, $id)->enddate);
     }
 
     /**
@@ -689,7 +626,7 @@ final class schoolyear_service_test extends \advanced_testcase {
     public static function foreign_access_cases(): array {
         $cases = [];
         foreach (['other teacher', 'admin'] as $actor) {
-            foreach (['get', 'update', 'delete', 'holidays', 'evaluations', 'count_plans'] as $operation) {
+            foreach (['get', 'update', 'delete', 'holidays', 'evaluations'] as $operation) {
                 $cases["{$actor} {$operation}"] = [$actor, $operation];
             }
         }
@@ -712,7 +649,6 @@ final class schoolyear_service_test extends \advanced_testcase {
             'delete' => schoolyear_service::delete($userid, $id),
             'holidays' => schoolyear_service::holidays($userid, $id),
             'evaluations' => schoolyear_service::evaluations($userid, $id),
-            'count_plans' => schoolyear_service::count_plans($userid, $id),
         };
     }
 
@@ -724,7 +660,7 @@ final class schoolyear_service_test extends \advanced_testcase {
     public static function no_access_cases(): array {
         $cases = [];
         foreach (['student', 'user without a role'] as $actor) {
-            foreach (['create', 'update', 'delete', 'get', 'list', 'holidays', 'evaluations', 'count_plans'] as $operation) {
+            foreach (['create', 'update', 'delete', 'get', 'list', 'holidays', 'evaluations'] as $operation) {
                 $cases["{$actor} {$operation}"] = [$actor, $operation];
             }
         }

@@ -32,8 +32,7 @@ use Behat\Mink\Exception\ExpectationException;
 /**
  * Named pages and steps for the class progress plugin.
  *
- * Pages: "local_classprogress > Home"; instances "local_classprogress > Plan", "Plan import" and "Plan deletion" (by
- * module code or title) and "local_classprogress > School year" (by name).
+ * Pages: "local_classprogress > Home"; instances "local_classprogress > School year" (by name).
  *
  * @package    local_classprogress
  * @category   test
@@ -58,30 +57,17 @@ class behat_local_classprogress extends behat_base {
     }
 
     /**
-     * Returns the URL of the page of one plan or school year, whoever owns it.
+     * Returns the URL of the page of one school year, whoever owns it.
      *
-     * @param string $type Page type: Plan, Plan import, Plan deletion or School year.
-     * @param string $identifier Module code or title of the plan; name of the school year.
+     * @param string $type Page type: School year.
+     * @param string $identifier Name of the school year.
      * @return moodle_url The URL.
      * @throws Exception For an unknown type.
      */
     protected function resolve_page_instance_url(string $type, string $identifier): moodle_url {
         global $DB;
 
-        $planid = fn(): int => (int) $DB->get_field_select(
-            'local_classprogress_plan',
-            'id',
-            'modulecode = ? OR moduletitle = ?',
-            [$identifier, $identifier],
-            MUST_EXIST
-        );
         switch (strtolower($type)) {
-            case 'plan':
-                return new moodle_url('/local/classprogress/plan.php', ['id' => $planid()]);
-            case 'plan import':
-                return new moodle_url('/local/classprogress/import.php', ['id' => $planid()]);
-            case 'plan deletion':
-                return new moodle_url('/local/classprogress/plan.php', ['id' => $planid(), 'action' => 'delete']);
             case 'school year':
                 $id = $DB->get_field('local_classprogress_schoolyear', 'id', ['name' => $identifier], MUST_EXIST);
                 return new moodle_url('/local/classprogress/schoolyear.php', ['id' => $id]);
@@ -91,12 +77,12 @@ class behat_local_classprogress extends behat_base {
     }
 
     /**
-     * Opens the page of a plan or school year and checks that Moodle refuses it with the given error.
+     * Opens the page of a school year and checks that Moodle refuses it with the given error.
      *
      * @Then the :identifier :page page shows the error :message
      *
-     * @param string $identifier Module code or title of the plan; name of the school year.
-     * @param string $page Page type with the component: "local_classprogress > Plan" or "local_classprogress > School year".
+     * @param string $identifier Name of the school year.
+     * @param string $page Page type with the component: "local_classprogress > School year".
      * @param string $message Text the error must contain.
      * @throws Exception For a page of another component.
      */
@@ -113,7 +99,7 @@ class behat_local_classprogress extends behat_base {
      *
      * @Then the page at :url shows the error :message
      *
-     * @param string $url URL relative to the site root, such as /local/classprogress/plan.php?id=1.
+     * @param string $url URL relative to the site root, such as /local/classprogress/schoolyear.php?id=1.
      * @param string $message Text the error must contain.
      */
     public function the_page_at_url_shows_the_error(string $url, string $message): void {

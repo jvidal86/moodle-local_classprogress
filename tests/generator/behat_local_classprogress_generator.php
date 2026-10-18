@@ -24,11 +24,10 @@
  */
 
 /**
- * Creates school years, holidays, plans and timetable slots for Behat scenarios, through the plugin's data generator.
+ * Creates school years and holidays for Behat scenarios, through the plugin's data generator.
  *
- * Entities: "local_classprogress > school years" (user, name), "holidays" (schoolyear by name, startdate),
- * "plans" (schoolyear by name, modulecode; a draft that was never imported, unless sourcetext is given) and "slots"
- * (plan by module code, weekday by English name or number with Monday = 0, hours).
+ * Entities: "local_classprogress > school years" (user, name) and "holidays" (schoolyear by name, startdate). Plan
+ * activities are made by mod_classprogress's generator.
  *
  * @package    local_classprogress
  * @category   test
@@ -36,9 +35,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class behat_local_classprogress_generator extends behat_generator_base {
-    /** @var string[] English weekday names, Monday = 0 to Sunday = 6. */
-    private const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
     /**
      * The entities that scenarios can create.
      *
@@ -59,18 +55,6 @@ class behat_local_classprogress_generator extends behat_generator_base {
                 'required' => ['schoolyear', 'startdate'],
                 'switchids' => ['schoolyear' => 'schoolyearid'],
             ],
-            'plans' => [
-                'singular' => 'plan',
-                'datagenerator' => 'plan',
-                'required' => ['schoolyear', 'modulecode'],
-                'switchids' => ['schoolyear' => 'schoolyearid'],
-            ],
-            'slots' => [
-                'singular' => 'slot',
-                'datagenerator' => 'slot',
-                'required' => ['plan', 'weekday', 'hours'],
-                'switchids' => ['plan' => 'planid'],
-            ],
         ];
     }
 
@@ -84,39 +68,5 @@ class behat_local_classprogress_generator extends behat_generator_base {
         global $DB;
 
         return (int) $DB->get_field('local_classprogress_schoolyear', 'id', ['name' => $name], MUST_EXIST);
-    }
-
-    /**
-     * Finds a plan by module code.
-     *
-     * @param string $code Its module code.
-     * @return int Its id.
-     */
-    protected function get_plan_id(string $code): int {
-        global $DB;
-
-        return (int) $DB->get_field('local_classprogress_plan', 'id', ['modulecode' => $code], MUST_EXIST);
-    }
-
-    /**
-     * A plan from a scenario has no text until it is imported.
-     *
-     * @param array $data Plan fields.
-     * @return array The fields.
-     */
-    protected function preprocess_plan(array $data): array {
-        return $data + ['sourcetext' => null];
-    }
-
-    /**
-     * Reads the weekday of a slot as a name or a number.
-     *
-     * @param array $data Slot fields.
-     * @return array The fields, with the weekday as a number.
-     */
-    protected function preprocess_slot(array $data): array {
-        $name = array_search(strtolower($data['weekday']), self::WEEKDAYS, true);
-        $data['weekday'] = $name === false ? (int) $data['weekday'] : $name;
-        return $data;
     }
 }

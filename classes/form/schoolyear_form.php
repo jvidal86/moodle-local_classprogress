@@ -33,8 +33,7 @@ require_once($CFG->libdir . '/formslib.php');
  * timemodified is the version the form was opened on, which the service checks.
  *
  * Custom data: evaluationcount, the number of stored evaluation periods (rows shown: at least 3, at most
- * schoolyear_service::MAX_EVALUATIONS, whatever the request asks for); userid, the acting user, so that new dates of a
- * stored school year are checked against its plans.
+ * schoolyear_service::MAX_EVALUATIONS, whatever the request asks for).
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -136,8 +135,7 @@ class schoolyear_form extends \moodleform {
     public function validation($data, $files): array {
         $errors = parent::validation($data, $files);
         $yeardata = self::to_service_data((object) $data);
-        $userid = (int) ($this->_customdata['userid'] ?? 0);
-        foreach (schoolyear_service::validate($yeardata, $userid, (int) ($data['id'] ?? 0)) as $field => $code) {
+        foreach (schoolyear_service::validate($yeardata) as $field => $code) {
             if ($field === 'holidays' && $code === 'error_holidaylines') {
                 $errors['holidays'] = self::holiday_errors(schoolyear_service::check_holidays($yeardata->holidays)->errors);
             } else if (str_starts_with($field, 'evaluations-')) {

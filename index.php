@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Landing page: the teacher's school years and plans, with the number of sessions of each plan.
+ * Landing page: the teacher's school years and the plan activities the teacher can open (REQ-MOD-005).
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal

@@ -16,8 +16,8 @@
 
 namespace local_classprogress\form;
 
+use local_classprogress\local\calendar;
 use local_classprogress\local\holiday_entry;
-use local_classprogress\local\plan_service;
 use local_classprogress\local\schoolyear_service;
 
 /**
@@ -117,7 +117,7 @@ final class schoolyear_form_test extends \advanced_testcase {
      * Names, labels and holiday text with <, > and & are stored exactly as typed, and every holiday line counts.
      *
      * Mondays and Fridays, 2 h, from 2026-09-14 to 2027-06-21, with the six holidays: 72 sessions. When the form
-     * cleaned the text as PARAM_TEXT, everything after "<-" was lost and the plan showed 80.
+     * cleaned the text as PARAM_TEXT, everything after "<-" was lost and the calendar showed 80.
      *
      * @group REQ-DAT-004
      * @group REQ-HOL-001
@@ -144,15 +144,8 @@ final class schoolyear_form_test extends \advanced_testcase {
             'Vacances de Setmana Santa',
             'Festa del Treball',
         ], array_values(array_map(fn(holiday_entry $h): string => $h->label, schoolyear_service::holidays($user->id, $id))));
-        $planid = plan_service::create($user->id, (object) [
-            'schoolyearid' => $id,
-            'modulecode' => 'MP 0372',
-            'moduletitle' => 'Gestió de bases de dades',
-            'startdate' => '2026-09-14',
-            'enddate' => '2027-06-21',
-            'timetable' => [0 => 2, 4 => 2],
-        ]);
-        $this->assertCount(72, plan_service::calendar($user->id, $planid)->sessions);
+        $holidays = schoolyear_service::holidays($user->id, $id);
+        $this->assertCount(72, calendar::compute('2026-09-14', '2027-06-21', [0 => 2.0, 4 => 2.0], $holidays)->sessions);
     }
 
     /**

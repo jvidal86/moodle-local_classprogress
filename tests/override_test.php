@@ -51,7 +51,7 @@ final class override_test extends \advanced_testcase {
             }
         }
 
-        $this->assertGreaterThan(30, $checked);
+        $this->assertGreaterThan(10, $checked);
         $this->assertSame([], $missing);
     }
 

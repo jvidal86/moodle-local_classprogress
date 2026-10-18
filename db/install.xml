@@ -4,7 +4,7 @@
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
   <TABLES>
-    <TABLE NAME="local_classprogress_schoolyear" COMMENT="A teacher's school year: its dates hold the holidays and evaluation periods shared by all of that teacher's plans in the year.">
+    <TABLE NAME="local_classprogress_schoolyear" COMMENT="A teacher's school year: its dates hold the holidays and evaluation periods shared by all of that teacher's plan activities in the year.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Owner."/>
@@ -47,126 +47,6 @@
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="schoolyearid" TYPE="foreign" FIELDS="schoolyearid" REFTABLE="local_classprogress_schoolyear" REFFIELDS="id"/>
-      </KEYS>
-    </TABLE>
-    <TABLE NAME="local_classprogress_plan" COMMENT="A teacher's year plan for one module, imported from Markdown; read-only once approved.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Owner."/>
-        <FIELD NAME="schoolyearid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="courseid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Optional course the plan is linked to."/>
-        <FIELD NAME="modulecode" TYPE="char" LENGTH="100" NOTNULL="true" SEQUENCE="false" COMMENT="Module code from the # heading (MP 0372); empty when there is none."/>
-        <FIELD NAME="moduletitle" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Module text from the # heading; empty when there is none."/>
-        <FIELD NAME="startdate" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="First class day, ISO yyyy-mm-dd; null until known."/>
-        <FIELD NAME="enddate" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Last class day, ISO yyyy-mm-dd; null until known."/>
-        <FIELD NAME="status" TYPE="char" LENGTH="10" NOTNULL="true" DEFAULT="draft" SEQUENCE="false" COMMENT="draft or approved."/>
-        <FIELD NAME="sourcetext" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The imported Markdown, as pasted or uploaded; null before the first import."/>
-        <FIELD NAME="timeapproved" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When the plan was approved and locked; 0 for a draft."/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
-        <KEY NAME="schoolyearid" TYPE="foreign" FIELDS="schoolyearid" REFTABLE="local_classprogress_schoolyear" REFFIELDS="id"/>
-        <KEY NAME="courseid" TYPE="foreign" FIELDS="courseid" REFTABLE="course" REFFIELDS="id"/>
-      </KEYS>
-    </TABLE>
-    <TABLE NAME="local_classprogress_slot" COMMENT="Weekly timetable of a plan: hours of class per weekday.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="planid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="weekday" TYPE="int" LENGTH="1" NOTNULL="true" SEQUENCE="false" COMMENT="Monday = 0 to Sunday = 6, as in the calendar class."/>
-        <FIELD NAME="hours" TYPE="number" LENGTH="5" NOTNULL="true" DEFAULT="0" SEQUENCE="false" DECIMALS="2"/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="planid" TYPE="foreign" FIELDS="planid" REFTABLE="local_classprogress_plan" REFFIELDS="id"/>
-      </KEYS>
-      <INDEXES>
-        <INDEX NAME="planid-weekday" UNIQUE="true" FIELDS="planid, weekday" COMMENT="One slot per weekday in a plan."/>
-      </INDEXES>
-    </TABLE>
-    <TABLE NAME="local_classprogress_planitem" COMMENT="One planned day of a plan (a ### section of the Markdown), frozen when the plan is approved.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="planid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="sortorder" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Position in the plan text, from 1."/>
-        <FIELD NAME="sessiondate" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Planned day, ISO yyyy-mm-dd, from the plan text."/>
-        <FIELD NAME="block" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="The RA or block (## heading) above the day; empty when there is none."/>
-        <FIELD NAME="title" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Short title after the date and hours; empty when there is none."/>
-        <FIELD NAME="content" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="The day's plan, Markdown; empty for an empty day."/>
-        <FIELD NAME="hours" TYPE="number" LENGTH="5" NOTNULL="false" SEQUENCE="false" DECIMALS="2" COMMENT="Planned hours, from the plan text or the timetable; null when neither gives them."/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="planid" TYPE="foreign" FIELDS="planid" REFTABLE="local_classprogress_plan" REFFIELDS="id"/>
-      </KEYS>
-      <INDEXES>
-        <INDEX NAME="planid-sessiondate" UNIQUE="false" FIELDS="planid, sessiondate"/>
-      </INDEXES>
-    </TABLE>
-    <TABLE NAME="local_classprogress_entry" COMMENT="What actually happened in a session: at most one per plan item, any number of unplanned ones. The text may name students.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="planid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="planitemid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The planned day; null for an unplanned session."/>
-        <FIELD NAME="sessiondate" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Day the session took place, ISO yyyy-mm-dd."/>
-        <FIELD NAME="status" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="Done, partly done or not done; codes fixed in M3."/>
-        <FIELD NAME="content" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="What was done."/>
-        <FIELD NAME="contentformat" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="4" SEQUENCE="false" COMMENT="Text format of content; 4 is FORMAT_MARKDOWN."/>
-        <FIELD NAME="reason" TYPE="char" LENGTH="50" NOTNULL="true" SEQUENCE="false" COMMENT="Reason code for a deviation; empty when there is none."/>
-        <FIELD NAME="reasonnote" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Free text about the reason."/>
-        <FIELD NAME="measure" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Corrective action for a deviation."/>
-        <FIELD NAME="carry" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1 when unfinished content is carried over to a later session."/>
-        <FIELD NAME="writtenon" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Day the entry was written, ISO yyyy-mm-dd in the user's time zone; later than sessiondate means late."/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Also the version a form carries to refuse stale saves."/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="planid" TYPE="foreign" FIELDS="planid" REFTABLE="local_classprogress_plan" REFFIELDS="id"/>
-        <KEY NAME="planitemid" TYPE="foreign-unique" FIELDS="planitemid" REFTABLE="local_classprogress_planitem" REFFIELDS="id" COMMENT="One entry per plan item; created as a unique index, which allows any number of nulls."/>
-      </KEYS>
-      <INDEXES>
-        <INDEX NAME="planid-sessiondate" UNIQUE="false" FIELDS="planid, sessiondate"/>
-      </INDEXES>
-    </TABLE>
-    <TABLE NAME="local_classprogress_entry_hist" COMMENT="History of every change to an entry, kept after the entry is deleted.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="entryid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The entry; it may no longer exist."/>
-        <FIELD NAME="planid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The entry's plan, so the row stays owned after the entry is deleted."/>
-        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Who made the change."/>
-        <FIELD NAME="realuserid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The real user when the change was made while logged in as userid; null otherwise."/>
-        <FIELD NAME="action" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="create, update or delete."/>
-        <FIELD NAME="snapshot" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="JSON of every field of the entry after the change (before it, for a delete)."/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="entryid" TYPE="foreign" FIELDS="entryid" REFTABLE="local_classprogress_entry" REFFIELDS="id"/>
-        <KEY NAME="planid" TYPE="foreign" FIELDS="planid" REFTABLE="local_classprogress_plan" REFFIELDS="id"/>
-        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
-        <KEY NAME="realuserid" TYPE="foreign" FIELDS="realuserid" REFTABLE="user" REFFIELDS="id"/>
-      </KEYS>
-    </TABLE>
-    <TABLE NAME="local_classprogress_import" COMMENT="Log of plan imports. The text itself is kept on the plan, not here.">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="planid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="source" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="paste or upload."/>
-        <FIELD NAME="filename" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false" COMMENT="Name of the uploaded file; empty for pasted text."/>
-        <FIELD NAME="contenthash" TYPE="char" LENGTH="40" NOTNULL="true" SEQUENCE="false" COMMENT="SHA-1 of the imported text."/>
-        <FIELD NAME="daycount" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Number of days read."/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="planid" TYPE="foreign" FIELDS="planid" REFTABLE="local_classprogress_plan" REFFIELDS="id"/>
       </KEYS>
     </TABLE>
   </TABLES>
