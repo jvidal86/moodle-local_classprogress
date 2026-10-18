@@ -47,8 +47,11 @@ OPEN_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 DAY = re.compile(
     r"^(?:([^\W\d_]+)\.?\s+)?" + DATE_RE +
     r"(?:\s*\[\s*([0-9]+(?:[.,][0-9]+)?)\s*h\s*\])?\s*(.*)$", re.I)
-SEPARATOR = re.compile(r"\s+[·—–-]\s+|:\s+")
-CODE_WORD = re.compile(r"^[A-Za-z]{0,4}[0-9]+[\w.-]*$")
+# Same matches as r"\s+[·—–-]\s+|:\s+" and r"^[A-Za-z]{0,4}[0-9]+[\w.-]*$", written so they cannot backtrack
+# quadratically (REQ-PLN-016): the lookbehind only lets a whitespace run start a separator at its first character,
+# and \w already includes the digits that "[0-9]+" would have to share with it.
+SEPARATOR = re.compile(r"(?<!\s)\s+[·—–-]\s+|:\s+")
+CODE_WORD = re.compile(r"^[A-Za-z]{0,4}[0-9][\w.-]*$")
 RANGE_WORD_THEN_DIGIT = re.compile(r"^(?:to|a|–|—|-|\.\.|→)\s*[0-9]", re.I)
 LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
