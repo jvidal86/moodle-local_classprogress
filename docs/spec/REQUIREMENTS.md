@@ -105,7 +105,7 @@ A line that is not a date, has a non-existent date, or ends before it starts is 
 
 ### REQ-HOL-003 Shared by the school year
 Phase: M1 · Status: agreed
-Holidays belong to a school year and apply to every plan of that year of the same teacher.
+Holidays belong to a school year of one teacher, global to that teacher across all their courses. A plan activity created with that school year uses its holidays and evaluation periods until the plan is approved; at approval the plan keeps its own copy (REQ-LCK-004). Changed 2026-10-18 for the course-activity design.
 
 ## CAL · Calendar (M1)
 
@@ -147,7 +147,7 @@ The capability is `write` type with the personal-data risk flag, and is allowed 
 
 ### REQ-OWN-001 Private to the owner
 Phase: M1 · Status: agreed
-A teacher cannot read, edit, delete or export another teacher's school years, plans, entries or history, even with the same capability, and even as an administrator. In M1 this is proved for school years and plans; entries and history are proved again in M3 and export in M4, each with the same two kinds of intruder.
+Changed 2026-10-18 for the course-activity design (decided by the teacher). A teacher's school years, holidays and evaluation periods are private to that teacher: no other teacher, even with the same capability or as an administrator through the plugin's pages, can read, edit, delete or export them. A plan activity with its days, entries and history is shared by the teachers of its course, that is the users holding the activity's capabilities there (REQ-MOD-002), and by nobody else: a teacher of another course or a student of the course cannot read, change or export it.
 
 ### REQ-OWN-002 No existence leak
 Phase: M1 · Status: agreed
@@ -181,7 +181,7 @@ Added 2026-10-18 (R1). Upgrading from any earlier version of the plugin, includi
 
 ### REQ-DAT-006 No plan without its school year
 Phase: M1 · Status: agreed
-Added 2026-10-18 (R1). Deleting a school year and creating a plan in it at the same moment never leaves a plan without its school year; if it ever happened, the landing page would still load and show such a plan apart.
+Deleting a school year and creating a plan activity with it at the same moment never leaves a plan pointing at a missing school year. A draft plan activity whose school year is gone (deleted by its teacher, erased, or not present after a restore) shows that clearly and asks for a school year before import or approval; an approved plan never needs one (REQ-LCK-004). Changed 2026-10-18.
 
 ## PRV · Privacy (M1)
 
@@ -191,21 +191,21 @@ The privacy provider describes every table and field the plugin stores.
 
 ### REQ-PRV-002 Export
 Phase: M1 · Status: agreed
-A privacy export contains the user's school years, holidays, plans, items, entries and history.
+A privacy export for a user contains their school years, holidays and evaluation periods, and, for each plan activity they contributed to, the entries and history rows they authored, in that activity's module context. Changed 2026-10-18.
 
 ### REQ-PRV-003 Erase
 Phase: M1 · Status: agreed
-Erasing a user deletes all of their data, history included, and leaves other users' data untouched. A history row belongs to the owner of its plan: when someone else acted on it (an administrator "logged in as" the teacher), that person's numeric id stays in the owner's history when that person is erased, as in Moodle's own logs (clarified 2026-10-18).
+Erasing a user deletes their school years, holidays and evaluation periods with everything that is only theirs. In plan activities, which are a course's shared record, their authorship is anonymised (their user id in entries and history replaced by the deleted-user placeholder) and the content stays, so the course's record for the inspection remains complete; the activity's data is fully deleted only with the activity or the course. Other users' data is untouched. **New rule for the teacher to check (2026-10-18).**
 
 ### REQ-PRV-004 Account deletion
 Phase: M1 · Status: agreed
-Deleting a user account removes their rows without waiting for a privacy request.
+Deleting a user account does the same as REQ-PRV-003 without waiting for a privacy request. A draft plan activity whose school year disappears this way stays usable: it asks for another school year before it can be imported or approved (REQ-DAT-006). Changed 2026-10-18.
 
 ## AUD · Audit events (M1)
 
 ### REQ-AUD-001 Audit events
 Phase: M1 · Status: agreed
-Added 2026-10-18. Importing and approving a plan and creating, editing or deleting an entry each record a Moodle event in the owner's user context, carrying only ids and codes, never plan or entry text. The event classes exist and are tested in M1; their triggering is checked again in M2 (import, approval) and M3 (entries).
+Importing and approving a plan and creating, editing or deleting an entry each record a Moodle event in the plan activity's module context, with the acting user, carrying only ids and codes, never plan or entry text. Changed 2026-10-18 (module context instead of the owner's user context).
 
 ---
 
@@ -259,6 +259,38 @@ History rows are never edited and survive the deletion of their entry. The histo
 
 ---
 
+## MOD · Course activity (M3) · drafted 2026-10-18, awaiting acceptance
+
+### REQ-MOD-001 Added from the activity chooser
+Phase: M3 · Status: draft
+"Class progress" appears in a course's "Add an activity or resource" list for users who may add it (editing teachers and managers). Its settings are the activity name, a school year (one of the adding teacher's school years), the weekly timetable and optional first and last class days chosen with date pickers. Each activity is one plan; the module code and title come from the imported text.
+
+### REQ-MOD-002 Teachers only
+Phase: M3 · Status: draft
+The activity is visible on the course page and can be opened only by the course's teachers and managers (view and edit capabilities for `teacher`, `editingteacher` and `manager`). Students and other users neither see it on the course page nor can open its pages by URL.
+
+### REQ-MOD-003 Opening the activity
+Phase: M3 · Status: draft
+Opening a draft activity leads to its import and preview (M2 behaviour); opening an approved one leads to its daily log (REQ-LOG-*). The plan's days are visible from both.
+
+### REQ-MOD-004 Shared by the course's teachers
+Phase: M3 · Status: draft
+Every teacher of the course holding the edit capability can import, approve and log sessions in the activity; history rows and events record who acted (and the real user for "log in as").
+
+### REQ-MOD-005 Top-menu overview
+Phase: M3 · Status: draft
+The top-menu "Class progress" page keeps the teacher's school years (holidays, evaluation periods) and lists every plan activity the teacher can open, across courses, with its course, status and number of pending sessions, linking to each.
+
+### REQ-MOD-006 Backup and restore
+Phase: M3 · Status: draft
+A course backup always contains the activity's plan, timetable, days, imports and copied holidays and evaluation periods; entries and history only when the backup includes user data. A restored approved plan is complete on its own; a restored draft asks for a school year (REQ-DAT-006).
+
+### REQ-MOD-007 Deletion and reset
+Phase: M3 · Status: draft
+Deleting the activity (or the course) deletes all its data. A course reset that removes user data deletes the activity's entries and history and keeps the plan.
+
+---
+
 ## IMP · Import (M2)
 
 ### REQ-IMP-001 Input and limits
@@ -289,7 +321,7 @@ An approved plan rejects any change to its items, timetable and source text thro
 
 ### REQ-LCK-002 Approval is final
 Phase: M2 · Status: agreed
-Approval records the time and fires the `plan_approved` event. There is no way to un-approve.
+Any teacher of the course holding the activity's edit capability may approve (decided 2026-10-18); approval records the time and the acting user and fires the `plan_approved` event. There is no way to un-approve.
 
 ### REQ-LCK-003 Safe display
 Phase: M2 · Status: agreed
@@ -297,4 +329,4 @@ Plan text is displayed through Moodle's Markdown formatting with cleaning on: sc
 
 ### REQ-LCK-004 Dates do not move
 Phase: M2 · Status: agreed
-Editing holidays or a timetable afterwards never changes the dates or hours of an approved plan.
+At approval the plan keeps its own copy of the holidays and evaluation periods it was checked against (decided 2026-10-18), so it depends on no school year afterwards. Editing or deleting holidays, timetables or the school year later never changes the dates or hours of an approved plan.

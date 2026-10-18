@@ -11,7 +11,7 @@ A teacher-facing Moodle plugin for the inspection requirement: **keep track of w
 3. Log what actually happened against each planned session, including days after the fact. Late entries are flagged automatically and every change is kept in a history.
 4. Export plan vs done to XLSX for the inspector. There is no official template, so we design the layout.
 
-One entry point in Moodle's top navigation, across all of the teacher's courses. Private to the teacher.
+**Design changed 2026-10-18 (hybrid, decision 12):** two plugins. `local_classprogress` keeps each teacher's school years, holidays and evaluation periods, the top-menu link and an overview of the teacher's plans; `mod_classprogress` (second repository) is a course activity added from the activity chooser: each activity is one plan with its days, entries and history, visible only to the course's teachers and shared by all of them. The original design (one site-wide `local_` plugin, everything private to one teacher) is tagged `local-only-design`. Sections 3 to 5 describe that original design where not updated; the requirements in `docs/spec/REQUIREMENTS.md` decide.
 
 Out of scope for v1: XLSX plan import (possible later, feeding the same parsed structure), moving or cancelling sessions (strikes, incidents), attachments on entries, pre-filling from Moodle activity data, reviewer access, `mod_attendance` import.
 
@@ -242,6 +242,7 @@ Decided:
 9. Spec-driven and test-driven: each phase starts with agreed requirements (`docs/spec/REQUIREMENTS.md`), code is written test first, every requirement is proved by a test that cites its id, and Behat covers about eight end-to-end teacher journeys (`docs/TESTING_STRATEGY.md`).
 10. PHPUnit tests carry their metadata as docblock annotations only (`@covers`, `@group REQ-…`, `@dataProvider`), no attributes. Verified in CI: they pass on 4.5 (PHPUnit 9.6) and 5.3 (PHPUnit 11.5, one deprecation notice per item, not a failure). Revisit only when a supported Moodle version ships PHPUnit 12.
 11. Independent review agents run in rounds R1, R2 and R5, one budgeted reviewer per round from R2 on (see 6.1 step 3). R0, R3 and R4 use the automatic checks plus the phase-specific checks in section 6.3.
+12. **Hybrid design (2026-10-18; reverses the first architecture decision of section 3):** a course activity plugin `mod_classprogress`, in a second repository `moodle-mod_classprogress`, owns plans, timetables, days, imports, entries and history (module context, course capabilities); `local_classprogress` keeps school years, holidays and evaluation periods (private to each teacher), the top-menu link and an overview of the teacher's plan activities. A plan activity is visible only to the course's teachers and shared by all of them; any of them may approve; at approval the plan copies its holidays and evaluation periods; a course backup always keeps the plan and keeps entries and history only with user data. The activity is built in M3 together with the daily log; requirements area MOD.
 
 The sample of real plan text that was needed is covered: `test-data/` holds three real plans from your CFGS material (section 10). What remains for M2 is your sign-off after trying the importer on your own plans (R2).
 
