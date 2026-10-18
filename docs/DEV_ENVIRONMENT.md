@@ -228,7 +228,7 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
 |---|---|
 | `port is already allocated` | Another stack or the local lab uses that port. Change `MOODLE_DOCKER_WEB_PORT` in the `env-*.sh`, source it, then `moodle-docker-compose down` and `moodle-docker-compose up -d`, and reinstall (section 4, "Where the data lives"). |
 | Changes to `db/hooks.php` or `access.php` have no effect | Cached. Raise `$plugin->version` and run the upgrade, or purge caches. |
-| New test class not found | Re-run `phpunit/cli/init.php` (or `util.php --upgrade`) so the component test suite is rebuilt. |
+| New test class not found | Re-run `phpunit/cli/init.php` so the component test suite is rebuilt (`util.php --upgrade` does not exist on 4.5; verified in M1). New files in an existing `tests/` subfolder are found without it; a version change or new generator needs it. |
 | Behat is very slow | Do not log in through the dashboard; start scenarios with `I am on the "..." page logged in as "teacher1"` and use generators. |
 | `permission denied` on `docker` | Log out and in again so the `docker` group applies. |
 | 5.3 shows a blank page or 404 | The document root must be `public/`; the `moodle-php-apache` image selects it itself when that folder exists. The start of `docker logs cp503-webserver-1` must say `Using /var/www/html/public`. |

@@ -68,7 +68,7 @@ Legend: ⚠ = legacy, version-specific (4.5 vs 5.x) or plugins disagree.
     **Why:** Tests cannot reach outside the plugin directory in CI or in the Marketplace zip.
     **Source:** `aim tests/local/utils_test.php:34`; c503 uses `$CFG->dirroot . '/h5p/tests/fixtures/...'` for binary fixtures (`.../generator/lib.php:57`).
 
-13. **Rule:** After adding or renaming tests/generators, re-run PHPUnit init (`util.php --upgrade` is faster for plugin-only changes); run one plugin with `vendor/bin/phpunit --testsuite local_classprogress_testsuite`.
+13. **Rule:** After adding or renaming tests/generators, re-run PHPUnit init (⚠ corrected in M1: `util.php --upgrade` does not exist on 4.5, so use `init.php`); run one plugin with `vendor/bin/phpunit --testsuite local_classprogress_testsuite`.
     **Why:** The component suite is generated at init; `moodle-plugin-ci` also guesses `<component>_testsuite`.
     **Source:** moodledev.io/general/development/tools/phpunit; `pci src/Command/PHPUnitCommand.php:167`.
 
