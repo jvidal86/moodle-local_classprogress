@@ -90,7 +90,8 @@ final class holiday_parser_test extends \basic_testcase {
 
         $this->assertSame([], $result->errors);
         $this->assertCount(1, $result->entries);
-        $this->assertSame([$start, $end, $label], [$result->entries[0]->start, $result->entries[0]->end, $result->entries[0]->label]);
+        $entry = $result->entries[0];
+        $this->assertSame([$start, $end, $label], [$entry->start, $entry->end, $entry->label]);
     }
 
     /**
@@ -100,7 +101,8 @@ final class holiday_parser_test extends \basic_testcase {
      * @group REQ-HOL-001
      */
     public function test_comments_and_blank_lines_are_ignored_but_counted(): void {
-        $text = "# Holidays 2026-27\r\n\r\n   # 2027-01-19 Jornada, commented out\r\n2026-11-01 Tots Sants\r\n \t \r\n2026-12-08\r\n";
+        $text = "# Holidays 2026-27\r\n\r\n   # 2027-01-19 Jornada, commented out\r\n"
+            . "2026-11-01 Tots Sants\r\n \t \r\n2026-12-08\r\n";
 
         $result = holiday_parser::parse($text);
 
