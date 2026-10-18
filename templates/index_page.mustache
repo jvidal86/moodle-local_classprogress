@@ -1,0 +1,103 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template local_classprogress/index_page
+
+    The landing page: the teacher's school years, each with its plans and their number of sessions.
+
+    Context variables required for this template:
+    * addyearurl - URL of the page that creates a school year.
+    * hasyears - Whether the teacher has any school year.
+    * years - School years, each with:
+      * name - Name, already through format_string().
+      * dates, counts - First and last day; number of holidays and evaluation periods.
+      * editurl, deleteurl, addplanurl - URLs to edit or delete it and to add a plan to it.
+      * hasplans, plans - Its plans, each with name (already through format_string()), course (already through
+        format_string(), or empty), dates, sessions, hours (empty when the calendar has no dates), url, deleteurl.
+
+    Example context (json):
+    {
+        "addyearurl": "https://example.com/local/classprogress/schoolyear.php",
+        "hasyears": true,
+        "years": [{
+            "name": "Curs 2026-2027",
+            "dates": "2026-09-14 to 2027-06-21",
+            "counts": "Holidays: 16. Evaluation periods: 3.",
+            "editurl": "https://example.com/local/classprogress/schoolyear.php?id=1",
+            "deleteurl": "https://example.com/local/classprogress/schoolyear.php?id=1&action=delete",
+            "addplanurl": "https://example.com/local/classprogress/plan.php?schoolyearid=1",
+            "hasplans": true,
+            "plans": [{
+                "name": "MP 0372 · Gestió de bases de dades",
+                "course": "DAM 1",
+                "dates": "2026-09-14 to 2027-05-24",
+                "sessions": 60,
+                "hours": "120",
+                "url": "https://example.com/local/classprogress/plan.php?id=1",
+                "deleteurl": "https://example.com/local/classprogress/plan.php?id=1&action=delete"
+            }]
+        }]
+    }
+}}
+<div class="local_classprogress-index">
+    <p>
+        <a class="btn btn-primary" href="{{addyearurl}}">{{#str}} addschoolyear, local_classprogress {{/str}}</a>
+    </p>
+    {{^hasyears}}
+        <p>{{#str}} noschoolyears, local_classprogress {{/str}}</p>
+    {{/hasyears}}
+    {{#years}}
+        <section class="mt-4">
+            <h3>{{{name}}}</h3>
+            <p class="text-muted">{{dates}} · {{counts}}</p>
+            <p>
+                <a class="btn btn-secondary" href="{{addplanurl}}">{{#str}} addplan, local_classprogress {{/str}}</a>
+                <a class="btn btn-link" href="{{editurl}}">{{#str}} editschoolyear, local_classprogress {{/str}}</a>
+                <a class="btn btn-link" href="{{deleteurl}}">{{#str}} deleteschoolyear, local_classprogress {{/str}}</a>
+            </p>
+            {{#hasplans}}
+                <table class="generaltable">
+                    <thead>
+                        <tr>
+                            <th scope="col">{{#str}} plan, local_classprogress {{/str}}</th>
+                            <th scope="col">{{#str}} course {{/str}}</th>
+                            <th scope="col">{{#str}} classdays, local_classprogress {{/str}}</th>
+                            <th scope="col">{{#str}} sessions, local_classprogress {{/str}}</th>
+                            <th scope="col">{{#str}} hours, local_classprogress {{/str}}</th>
+                            <th scope="col"><span class="sr-only">{{#str}} actions {{/str}}</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#plans}}
+                            <tr>
+                                <td><a href="{{url}}">{{{name}}}</a></td>
+                                <td>{{{course}}}</td>
+                                <td>{{dates}}</td>
+                                <td>{{sessions}}</td>
+                                <td>{{hours}}</td>
+                                <td><a href="{{deleteurl}}">{{#str}} delete {{/str}}</a></td>
+                            </tr>
+                        {{/plans}}
+                    </tbody>
+                </table>
+            {{/hasplans}}
+            {{^hasplans}}
+                <p>{{#str}} noplans, local_classprogress {{/str}}</p>
+            {{/hasplans}}
+        </section>
+    {{/years}}
+</div>

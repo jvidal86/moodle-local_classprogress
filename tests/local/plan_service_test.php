@@ -341,6 +341,47 @@ final class plan_service_test extends \advanced_testcase {
     }
 
     /**
+     * The calendar on screen shows the calendar class's figures as they are: sessions, hours, per month, per holiday.
+     *
+     * @covers \local_classprogress\output\calendar_view
+     * @group REQ-CAL-001
+     * @group REQ-CAL-002
+     * @group REQ-CAL-003
+     */
+    public function test_calendar_view_shows_the_calendar_figures(): void {
+        global $PAGE;
+
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $this->setUser($user);
+        $yearid = self::year($user->id, "2026-10-12 Festa\n2026-12-22 to 2027-01-07 Nadal\n2027-07-01 Estiu");
+        $plan = plan_service::get($user->id, plan_service::create($user->id, self::plandata($yearid)));
+        $result = plan_service::calendar($user->id, $plan->id);
+
+        $view = \local_classprogress\output\calendar_view::for_plan($user->id, $plan);
+        $context = $view->export_for_template($PAGE->get_renderer('core'));
+
+        $this->assertNull($context->message);
+        $this->assertSame('68 sessions, 136 hours of class', $context->summary);
+        $this->assertCount(68, $result->sessions);
+        $this->assertEquals(136, $result->totalhours);
+        $this->assertSame(array_values($result->sessionspermonth), array_column($context->months, 'sessions'));
+        $this->assertSame('September 2026', $context->months[0]['month']);
+        $this->assertSame([1, 4, 0], array_column($context->holidays, 'lost'));
+        $this->assertSame(array_values($result->lost), array_column($context->holidays, 'lost'));
+        $this->assertSame(['Festa', 'Nadal', 'Estiu'], array_column($context->holidays, 'label'));
+        $this->assertSame('2026-12-22 to 2027-01-07', $context->holidays[1]['dates']);
+        $dates = array_map(fn(calendar_session $s): string => $s->date, $result->sessions);
+        $this->assertSame($dates, array_column($context->sessions, 'date'));
+        $this->assertSame(['Monday', '2'], [$context->sessions[0]['weekday'], $context->sessions[0]['hours']]);
+
+        plan_service::update($user->id, $plan->id, self::plandata($yearid, ['startdate' => '']));
+        $view = \local_classprogress\output\calendar_view::for_plan($user->id, plan_service::get($user->id, $plan->id));
+        $context = $view->export_for_template($PAGE->get_renderer('core'));
+        $this->assertSame(get_string('calendar_missing_dates', 'local_classprogress'), $context->message);
+    }
+
+    /**
      * The holidays of a school year remove sessions from every plan of that year, and from no plan of another year or
      * of another teacher; editing them changes the calendar of every plan of the year.
      *
