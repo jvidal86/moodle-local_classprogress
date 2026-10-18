@@ -579,15 +579,12 @@ final class plan_parser_test extends \basic_testcase {
             '   ' . $fourticks . "\x60 \t",
         ];
         $tildes = ["~~~ info with \x60backticks\x60", '### inside', self::BACKTICKS . "\x60\x60", '~~~~'];
-        $result = self::parse(self::md('# MP01 · Fences', '## RA1', '### 2026-10-05 [2h]', ...$lines, ...[
-            '### 2026-10-09 [2h]',
-            ...$tildes,
-            '### 2026-10-16 [2h]',
-            '- c',
-        ]));
+        $text = self::md('# MP01 · Fences', '## RA1', '### 2026-10-05 [2h]', ...$lines, ...['### 2026-10-09 [2h]', ...$tildes,
+            '### 2026-10-16 [2h]', '- c']);
+        $result = self::parse($text);
 
-        $this->assertSame(['2026-10-05', '2026-10-09', '2026-10-16'], array_map(fn(plan_day $day): string => $day->date,
-            $result->days));
+        $dates = array_map(fn(plan_day $day): string => $day->date, $result->days);
+        $this->assertSame(['2026-10-05', '2026-10-09', '2026-10-16'], $dates);
         $this->assertSame(rtrim(implode("\n", $lines)), $result->days[0]->content);
         $this->assertSame(implode("\n", $tildes), $result->days[1]->content);
         $this->assertSame([], self::issues($result));
@@ -909,7 +906,7 @@ final class plan_parser_test extends \basic_testcase {
         $this->assertSame(['error bad_date 3', 'error bad_date 4', 'warning unclosed_fence 6'], self::issues($result));
         $this->assertNull($result->module->code);
         $this->assertCount(1, $result->days);
-        $this->assertStringEndsWith('x # # #', $result->blocks[0]);
+        $this->assertSame([str_repeat('#', $n) . 'x' . str_repeat(' #', $n - 1)], $result->blocks);
     }
 
     /**

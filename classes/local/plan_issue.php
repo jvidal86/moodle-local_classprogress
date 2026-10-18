@@ -32,8 +32,11 @@ final class plan_issue {
     /** @var string Level of an issue the teacher must confirm. */
     public const WARNING = 'warning';
 
-    /** @var string Error: a ### heading without a readable, existing date. Parameter: text. */
+    /** @var string Error: a ### heading without a readable, existing date, or with a non-weekday word. Parameter: text. */
     public const BAD_DATE = 'bad_date';
+
+    /** @var string Error: the text is not UTF-8, so nothing is read; the line is the first that is not. No parameters. */
+    public const NOT_UTF8 = 'not_utf8';
 
     /** @var string Error: a second # heading. No parameters. */
     public const MULTIPLE_MODULES = 'multiple_modules';
@@ -64,6 +67,9 @@ final class plan_issue {
 
     /** @var string Warning: neither the heading nor the timetable gives the day's hours. Parameter: date. */
     public const MISSING_HOURS = 'missing_hours';
+
+    /** @var string Warning: a code fence is still open at the end of the text; the line is where it opened. No parameters. */
+    public const UNCLOSED_FENCE = 'unclosed_fence';
 
     /**
      * Creates the issue.

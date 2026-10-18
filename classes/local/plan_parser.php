@@ -20,13 +20,10 @@ namespace local_classprogress\local;
  * Reads a year plan written in Markdown: # module, ## RA or block, ### one day, free Markdown under each day.
  *
  * The executable specification is tools/check_plan.py: this class gives the same results as its parse() and
- * summarize(), and tools/compare_parsers.py checks that on the fixtures and on random plans. It differs on purpose
- * only where the reference contradicts the requirements, on inputs a real plan does not contain: a leading byte order
- * mark is ignored (REQ-PLN-001), dates and hours are read only in ASCII digits (REQ-PLN-004), and a weekday name
- * matches only its own upper and lower case letters (the reference fails on 'ſat' or 'frı').
+ * summarize(), and tools/compare_parsers.py checks that on the fixtures and on random plans. The one input the
+ * reference cannot receive, bytes that are not UTF-8, gives the single error not_utf8 (REQ-PLN-015).
  *
- * Every pattern is written to run in linear time; the reference's own patterns backtrack on long runs of spaces.
- * No Moodle functions, constants or globals, and no clock.
+ * Every pattern runs in linear time (REQ-PLN-016). No Moodle functions, constants or globals, and no clock.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -43,8 +40,8 @@ final class plan_parser {
     /** @var string White space as Python's str.strip() and \s see it, as the inside of a character class. */
     private const SPACE = '\t\n\x0b\x0c\r\x1c-\x20\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}';
 
-    /** @var string Line breaks as Python's str.splitlines() sees them. */
-    private const LINE_BREAK = '/\r\n|[\n\x0b\x0c\r\x1c-\x1e\x{85}\x{2028}\x{2029}]/u';
+    /** @var string Line ends: LF, CRLF or CR (REQ-PLN-015). Byte-wise, so it also splits text that is not UTF-8. */
+    private const LINE_BREAK = '/\r\n|\r|\n/';
 
     /** @var string White space at the start of a text. */
     private const LEADING_SPACE = '/^[' . self::SPACE . ']++/u';
@@ -55,36 +52,30 @@ final class plan_parser {
     /** @var string Start of a heading: one to six hashes, then spaces or tabs. */
     private const HEADING = '/^(#{1,6})[ \t]++/u';
 
-    /** @var string A line that opens or closes a code fence, of either kind. */
-    private const FENCE = '/^[' . self::SPACE . ']*+(?:\x60{3}|~{3})/u';
+    /** @var string Start of a line that opens a code fence: at most three spaces, three or more backticks or tildes. */
+    private const OPEN_FENCE = '/^ {0,3}+(\x60{3,}+|~{3,}+)/u';
+
+    /** @var string A line that can close a code fence: at most three spaces, a run of backticks or tildes, spaces. */
+    private const CLOSE_FENCE = '/^ {0,3}+(\x60{3,}+|~{3,}+)[ \t]*+\z/u';
 
     /** @var string Separator between module code and title: ' · ', ' — ', ' – ', ' - ' (any spaces) or ': '. */
     private const SEPARATOR = '/(?<![' . self::SPACE . '])[' . self::SPACE . ']++[\x{b7}\x{2014}\x{2013}-][' . self::SPACE . ']++'
         . '|:[' . self::SPACE . ']++/u';
 
-    /** @var string A first word that is a module code: at most four ASCII letters, a digit, then letters, digits, _ . -. */
-    private const CODE_WORD = '/^[A-Za-z]{0,4}+\p{Nd}[\p{L}\p{N}_.\-]*+\z/u';
+    /** @var string A first word that is a module code: at most four ASCII letters, 0-9, then letters, digits, _ . -. */
+    private const CODE_WORD = '/^[A-Za-z]{0,4}+[0-9][\p{L}\p{N}_.\-]*+\z/u';
 
     /** @var string A strict ISO date, yyyy-mm-dd. */
     private const ISO_DATE = '/^[0-9]{4}-[0-9]{2}-[0-9]{2}\z/';
 
-    /** @var string Pattern of a day heading: weekday, date, hours, title. Built from WEEKDAYS. */
-    private readonly string $daypattern;
-
     /**
-     * Builds the day heading pattern.
+     * @var string A day heading: an optional word (letters, as Python's [^\W\d_]) and dot, the date in digits 0-9,
+     *     optional hours, the title.
      */
-    public function __construct() {
-        $names = array_keys(self::WEEKDAYS);
-        // Longest first, as in the reference.
-        usort($names, fn(string $a, string $b): int => mb_strlen($b, 'UTF-8') <=> mb_strlen($a, 'UTF-8'));
-        $weekdays = implode('|', array_map(fn(string $name): string => self::caseless($name), $names));
-        $space = '[' . self::SPACE . ']';
-        $this->daypattern = '~^(?:(' . $weekdays . ')\.?' . $space . '++)?'
-            . '([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})'
-            . '(?:' . $space . '*+\[' . $space . '*+([0-9]++(?:[.,][0-9]++)?)' . $space . '*+[hH]' . $space . '*+\])?'
-            . $space . '*+(.*)$~u';
-    }
+    private const DAY = '~^(?:([\p{L}\p{Nl}\p{No}]++)\.?[' . self::SPACE . ']++)?'
+        . '([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})'
+        . '(?:[' . self::SPACE . ']*+\[[' . self::SPACE . ']*+([0-9]++(?:[.,][0-9]++)?)[' . self::SPACE . ']*+[hH]'
+        . '[' . self::SPACE . ']*+\])?[' . self::SPACE . ']*+(.*)\z~su';
 
     /**
      * Reads a plan.
@@ -94,15 +85,16 @@ final class plan_parser {
      * @param array<int, float>|null $timetable Weekday (Monday = 0) to class hours; null for no timetable. An empty
      *     timetable has no class day.
      * @param string[]|null $year First and last day of the school year, yyyy-mm-dd; null for no school year check.
-     * @return plan_result
-     * @throws \InvalidArgumentException If the text is not UTF-8 or the school year is not two ISO dates.
+     * @return plan_result When the text is not UTF-8, nothing but the error not_utf8 at the first line that is not.
+     * @throws \InvalidArgumentException If the school year is not two ISO dates.
      */
     public function parse(string $text, ?array $holidays = null, ?array $timetable = null, ?array $year = null): plan_result {
-        if (!mb_check_encoding($text, 'UTF-8')) {
-            throw new \InvalidArgumentException('The plan is not valid UTF-8.');
-        }
         if ($year !== null) {
             $year = self::school_year($year);
+        }
+        if (!mb_check_encoding($text, 'UTF-8')) {
+            $issue = new plan_issue(plan_issue::ERROR, plan_issue::NOT_UTF8, self::first_line_not_utf8($text));
+            return new plan_result(null, [], [], [$issue]);
         }
         if (str_starts_with($text, "\u{FEFF}")) {
             $text = substr($text, strlen("\u{FEFF}"));
@@ -114,14 +106,17 @@ final class plan_parser {
         $issues = [];
         $block = null;
         $current = null;
-        $infence = false;
+        $fence = null;
         $previous = null;
         foreach (self::lines($text) as $index => $line) {
             $number = $index + 1;
-            if (self::find(self::FENCE, $line) !== null) {
-                $infence = !$infence;
+            $heading = null;
+            if ($fence === null) {
+                $fence = self::opening_fence($line, $number);
+                $heading = $fence === null ? self::heading($line) : null;
+            } else if (self::closes_fence($line, $fence)) {
+                $fence = null;
             }
-            $heading = $infence ? null : self::heading($line);
             if ($heading === null) {
                 if ($current !== null) {
                     $days[$current]['body'][] = $line;
@@ -142,14 +137,14 @@ final class plan_parser {
                 continue;
             }
 
-            $day = $this->day_heading($title);
+            $day = self::day_heading($title);
             if ($day === null) {
                 $issues[] = new plan_issue(plan_issue::ERROR, plan_issue::BAD_DATE, $number, ['text' => $title]);
                 continue;
             }
             $date = $day['date'];
             $hours = $day['hours'];
-            if ($day['prefix'] !== null && self::WEEKDAYS[mb_strtolower($day['prefix'], 'UTF-8')] !== $day['weekday']) {
+            if ($day['prefix'] !== null && $day['named'] !== $day['weekday']) {
                 $issues[] = self::warning(plan_issue::WEEKDAY_MISMATCH, $number, ['weekday' => $day['prefix'], 'date' => $date]);
             }
             if ($previous !== null && strcmp($date, $previous) < 0) {
@@ -179,6 +174,9 @@ final class plan_parser {
                 'body' => []];
             $current = count($days) - 1;
         }
+        if ($fence !== null) {
+            $issues[] = self::warning(plan_issue::UNCLOSED_FENCE, $fence['line']);
+        }
 
         $result = [];
         foreach ($days as $day) {
@@ -203,11 +201,11 @@ final class plan_parser {
      * Reads the text of a ### heading.
      *
      * @param string $title Heading text, trimmed.
-     * @return array{date: string, weekday: int, prefix: ?string, hours: ?float, title: string}|null Null when there is
-     *     no readable, existing date.
+     * @return array{date: string, weekday: int, prefix: ?string, named: ?int, hours: ?float, title: string}|null Null
+     *     when there is no readable, existing date, or the word before it is not a weekday.
      */
-    private function day_heading(string $title): ?array {
-        $groups = self::find($this->daypattern, $title);
+    private static function day_heading(string $title): ?array {
+        $groups = self::find(self::DAY, $title);
         if ($groups === null) {
             return null;
         }
@@ -219,11 +217,19 @@ final class plan_parser {
         if (!checkdate($month, $day, $year)) {
             return null;
         }
+        $named = null;
+        if ($groups[1] !== null) {
+            $named = self::WEEKDAYS[mb_strtolower($groups[1], 'UTF-8')] ?? null;
+            if ($named === null) {
+                return null;
+            }
+        }
         $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
         return [
             'date' => $date,
             'weekday' => (int) (new \DateTimeImmutable($date, new \DateTimeZone('UTC')))->format('N') - 1,
             'prefix' => $groups[1],
+            'named' => $named,
             'hours' => $groups[3] === null ? null : (float) str_replace(',', '.', $groups[3]),
             'title' => self::strip($groups[4]),
         ];
@@ -240,10 +246,45 @@ final class plan_parser {
         if ($groups === null || strlen($groups[1]) > 3) {
             return null;
         }
-        // Drop a closing sequence (spaces, hashes, spaces) right to left, which is what the reference's lazy pattern
-        // does, without its backtracking. Like the reference, it also drops a '#' with no space before it.
-        $text = rtrim(rtrim(rtrim(substr($line, strlen($groups[0])), " \t"), '#'), " \t");
+        // A closing run of # goes only when a space or tab comes before it (REQ-PLN-001): "C#" keeps its '#'.
+        $text = rtrim(substr($line, strlen($groups[0])), " \t");
+        $open = rtrim($text, '#');
+        if ($open !== $text && ($open === '' || str_ends_with($open, ' ') || str_ends_with($open, "\t"))) {
+            $text = $open;
+        }
         return [strlen($groups[1]), self::strip($text)];
+    }
+
+    /**
+     * Reads a line as the start of a code fence.
+     *
+     * @param string $line One line of the plan.
+     * @param int $number Its line number.
+     * @return array{char: string, length: int, line: int}|null The fence, or null when the line opens none.
+     */
+    private static function opening_fence(string $line, int $number): ?array {
+        $groups = self::find(self::OPEN_FENCE, $line);
+        if ($groups === null) {
+            return null;
+        }
+        $char = $groups[1][0];
+        // The info text of a backtick fence may not hold a backtick, so a line like "```ls```" is inline code.
+        if ($char !== '~' && str_contains(substr($line, strlen($groups[0])), "\x60")) {
+            return null;
+        }
+        return ['char' => $char, 'length' => strlen($groups[1]), 'line' => $number];
+    }
+
+    /**
+     * Tells whether a line closes an open code fence: its own character, at least as long, nothing but spaces after.
+     *
+     * @param string $line One line of the plan.
+     * @param array{char: string, length: int, line: int} $fence The open fence.
+     * @return bool
+     */
+    private static function closes_fence(string $line, array $fence): bool {
+        $groups = self::find(self::CLOSE_FENCE, $line);
+        return $groups !== null && $groups[1][0] === $fence['char'] && strlen($groups[1]) >= $fence['length'];
     }
 
     /**
@@ -291,20 +332,34 @@ final class plan_parser {
     }
 
     /**
-     * Splits a text into lines the way Python's str.splitlines() does.
+     * Splits a text into lines at LF, CRLF and CR, as the reference does (a text that ends with a line end has a last,
+     * empty line).
      *
      * @param string $text The plan.
-     * @return string[] The lines, without their line breaks.
+     * @return string[] The lines, without their line ends.
      */
     private static function lines(string $text): array {
         $lines = preg_split(self::LINE_BREAK, $text);
         if ($lines === false) {
             throw new \RuntimeException('Cannot split the plan into lines: ' . preg_last_error_msg());
         }
-        if (end($lines) === '') {
-            array_pop($lines);
-        }
         return $lines;
+    }
+
+    /**
+     * Finds the first line that is not UTF-8.
+     *
+     * @param string $text A text that is not UTF-8.
+     * @return int The line number, from 1.
+     */
+    private static function first_line_not_utf8(string $text): int {
+        foreach (self::lines($text) as $index => $line) {
+            if (!mb_check_encoding($line, 'UTF-8')) {
+                return $index + 1;
+            }
+        }
+        // Not reached: CR and LF never fall inside a UTF-8 sequence, so a bad sequence lies within one line.
+        return 1;
     }
 
     /**
@@ -335,21 +390,6 @@ final class plan_parser {
             throw new \RuntimeException('Cannot match a pattern: ' . preg_last_error_msg());
         }
         return $found === 1 ? $groups : null;
-    }
-
-    /**
-     * Writes a word as a pattern that matches it in upper or lower case, letter by letter.
-     *
-     * @param string $word A weekday name in lower case.
-     * @return string
-     */
-    private static function caseless(string $word): string {
-        $pattern = '';
-        foreach (mb_str_split($word, 1, 'UTF-8') as $char) {
-            $upper = mb_strtoupper($char, 'UTF-8');
-            $pattern .= $upper === $char ? preg_quote($char, '~') : '[' . $char . $upper . ']';
-        }
-        return $pattern;
     }
 
     /**
