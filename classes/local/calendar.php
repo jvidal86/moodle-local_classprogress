@@ -42,7 +42,7 @@ final class calendar {
      *
      * @param string|null $first First class day, ISO yyyy-mm-dd.
      * @param string|null $last Last class day, ISO yyyy-mm-dd.
-     * @param array<int, float> $timetable Weekday => hours, Monday = 0 to Sunday = 6; missing days and hours <= 0 mean no class.
+     * @param float[] $timetable Weekday => hours, Monday = 0 to Sunday = 6; missing days and hours <= 0 mean no class.
      * @param holiday_entry[] $holidays Holiday entries; when they overlap, the first one owns the day.
      * @return calendar_result The sessions and totals, or an empty result with a code.
      */

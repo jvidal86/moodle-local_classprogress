@@ -30,8 +30,8 @@ final class calendar_result {
      * @param string|null $code Null when the dates are valid; otherwise a calendar constant saying why the result is empty.
      * @param calendar_session[] $sessions The sessions in date order, as a list.
      * @param float $totalhours Sum of the hours of all sessions.
-     * @param array<string, int> $sessionspermonth yyyy-mm => sessions, for every month from the first to the last class day.
-     * @param array<int|string, int> $lost Sessions each holiday entry removed, under the same key as in the holiday array.
+     * @param int[] $sessionspermonth yyyy-mm => sessions, for every month from the first to the last class day.
+     * @param int[] $lost Sessions each holiday entry removed, under the same key as in the holiday array.
      */
     public function __construct(
         /** @var string|null Null when the dates are valid; otherwise a calendar constant saying why the result is empty. */

@@ -51,6 +51,7 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 - [ ] Unique constraints as unique indexes (not keys) unless an FK target; key names like `planid-sessiondate`.
 - [ ] Templates have the `@template` docblock with an example context; `export_for_template()` returns only scalars, arrays and `stdClass`.
 - [ ] No `unserialize`, `print_r`, `error_log`, `extract`, `sizeof`; errors are `moodle_exception` with a lang string id.
+- [ ] In `@param` lines use `float[]`, `int[]`, `holiday_entry[]` or `array`, never generics with a space such as `array<int, float>`: Moodle's PHPDoc checker splits the type at the space and reports "incomplete parameters list" (found when merging the calendar, 2026-10-18). Run `moodle-plugin-ci phpdoc` before merging; phpcs alone does not catch it.
 - [ ] Settings in `settings.php` inside `if ($hassiteconfig)` and `if ($ADMIN->fulltree)`, named `local_classprogress/<key>`, with the right PARAM type.
 
 ## 4. Security checklist

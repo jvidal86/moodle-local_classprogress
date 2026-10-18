@@ -121,7 +121,7 @@ final class calendar_test extends \basic_testcase {
      * @group REQ-CAL-001
      * @param string $first First class day.
      * @param string $last Last class day.
-     * @param array<int, float> $timetable Weekday => hours.
+     * @param float[] $timetable Weekday => hours.
      * @param int $sessions Sessions counted by the teacher's tool.
      */
     public function test_real_modules_match_teachers_tool(string $first, string $last, array $timetable, int $sessions): void {
