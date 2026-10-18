@@ -57,6 +57,9 @@ final class plan_parser_test extends \basic_testcase {
             'no code' => ['Programació', null, 'Programació'],
             'first word is not a code' => ['Bases de dades', null, 'Bases de dades'],
             'five letters before the digits' => ['MODUL1 Programació', null, 'MODUL1 Programació'],
+            'tab after a code word' => ["MP03\tProgramació", null, "MP03\tProgramació"],
+            'letters and digits of any script in a code word' => ['MP٠٣é Programació', 'MP٠٣é', 'Programació'],
+            'empty code before a colon' => [': Programació', '', 'Programació'],
             'closing hashes' => ['MP03 · Programació ##', 'MP03', 'Programació'],
         ];
     }
@@ -168,11 +171,14 @@ final class plan_parser_test extends \basic_testcase {
             "## Bloc 2\u{00A0}",
             "## Bloc 3 #\u{00A0}",
             "## Bloc 4\u{200B}",
+            "## Bloc 5\x1F",
+            "## Bloc 6\u{180E}",
             '## C#',
         ));
 
-        // A zero-width space is not white space. The reference also drops a closing '#' that has no space before it.
-        $this->assertSame(['Bloc 1', 'Bloc 2', 'Bloc 3 #', "Bloc 4\u{200B}", 'C'], $result->blocks);
+        // White space is Python's: U+001F is, U+200B and U+180E are not. The reference also drops a closing '#' that
+        // has no space before it.
+        $this->assertSame(['Bloc 1', 'Bloc 2', 'Bloc 3 #', "Bloc 4\u{200B}", 'Bloc 5', "Bloc 6\u{180E}", 'C'], $result->blocks);
     }
 
     /**
@@ -407,6 +413,21 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
+     * Lines break where Python's str.splitlines() breaks them: also at VT, FF, FS, GS, RS, NEL, LS and PS.
+     *
+     * @group REQ-PLN-007
+     */
+    public function test_line_breaks_of_the_reference(): void {
+        $result = self::parse("# MP01 · Line breaks\u{85}## RA1\u{2028}### 2026-10-05 [2h]\u{2029}"
+            . "- a\x0B- b\x0C- c\x1C- d\x1D- e\x1E");
+
+        $this->assertSame(['RA1'], $result->blocks);
+        $this->assertSame(3, $result->days[0]->line);
+        $this->assertSame("- a\n- b\n- c\n- d\n- e", $result->days[0]->content);
+        $this->assertSame([], self::issues($result));
+    }
+
+    /**
      * Headings inside code fences and headings of level 4 or more are body text.
      *
      * @group REQ-PLN-008
@@ -422,6 +443,9 @@ final class plan_parser_test extends \basic_testcase {
             '~~~',
             '### 2026-12-26 [2h]',
             '~~~',
+            '  ```',
+            '### 2026-12-28 [2h]',
+            "\t```",
             '#### Level 4',
             '##### Level 5',
             '###### Level 6',
@@ -626,6 +650,34 @@ final class plan_parser_test extends \basic_testcase {
             'errors' => ['bad_date', 'bad_date'],
             'warnings' => ['empty_day', 'empty_day', 'missing_hours', 'no_class_weekday', 'out_of_order'],
         ], $result->summary());
+    }
+
+    /**
+     * Issues are listed by line and, on one line, in the order the reference finds them.
+     *
+     * @group REQ-PLN-014
+     */
+    public function test_issues_are_ordered_by_line(): void {
+        $result = self::parse(self::md(
+            '# MP01 · Order of issues',
+            '### dl 09/10/2026',
+            '### 2026-02-30',
+            '# MP02 · Second module',
+            '### 2026-10-09 [2h]',
+            '- Friday',
+        ), null, [0 => 2.0]);
+
+        $this->assertSame([
+            'warning weekday_mismatch 2',
+            'warning no_class_weekday 2',
+            'warning missing_hours 2',
+            'warning no_block 2',
+            'warning empty_day 2',
+            'error bad_date 3',
+            'error multiple_modules 4',
+            'warning no_class_weekday 5',
+            'warning no_block 5',
+        ], self::issues($result));
     }
 
     /**
