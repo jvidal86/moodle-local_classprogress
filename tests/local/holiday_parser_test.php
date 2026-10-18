@@ -95,6 +95,60 @@ final class holiday_parser_test extends \basic_testcase {
     }
 
     /**
+     * Lines where a range word or dash after the date is not followed by a digit, so the rest is the label.
+     *
+     * @return array<string, array{string, string, string, string}> Line, expected start, end and label.
+     */
+    public static function range_word_then_text_provider(): array {
+        return [
+            'dash then text' => ['2026-10-12 - Festa', '2026-10-12', '2026-10-12', '- Festa'],
+            'to then text' => ['2026-10-12 to be confirmed', '2026-10-12', '2026-10-12', 'to be confirmed'],
+            'arrow then text' => ['2026-10-12 → pont', '2026-10-12', '2026-10-12', '→ pont'],
+            'digit later in the label' => ['2026-10-12 Festa a 2 bandes', '2026-10-12', '2026-10-12', 'Festa a 2 bandes'],
+            'correct period' => ['2026-12-22 to 2027-01-07 Nadal', '2026-12-22', '2027-01-07', 'Nadal'],
+            'period, label with dash and digit' => ['2026-12-22 to 2026-12-23 - 2 dies', '2026-12-22', '2026-12-23', '- 2 dies'],
+        ];
+    }
+
+    /**
+     * A range word or dash followed by text, not a digit, is part of the label of a one-day holiday.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @dataProvider range_word_then_text_provider
+     * @group REQ-HOL-002
+     * @param string $line The holiday line.
+     * @param string $start Expected first day.
+     * @param string $end Expected last day.
+     * @param string $label Expected label.
+     */
+    public function test_range_word_then_text_is_part_of_label(string $line, string $start, string $end, string $label): void {
+        $result = holiday_parser::parse($line);
+
+        $this->assertSame([], $result->errors);
+        $this->assertCount(1, $result->entries);
+        $entry = $result->entries[0];
+        $this->assertSame([$start, $end, $label], [$entry->start, $entry->end, $entry->label]);
+    }
+
+    /**
+     * A leading byte-order mark is ignored, and lines may end with LF, CRLF or CR, also mixed.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-HOL-001
+     */
+    public function test_leading_bom_is_ignored_and_lf_crlf_cr_end_lines(): void {
+        $text = "\u{FEFF}2026-09-11 Diada\r2026-10-12 Festa\r\n\r\n2026-11-01 Tots Sants\n2026-12-08";
+
+        $result = holiday_parser::parse($text);
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame(
+            [[1, 'Diada'], [2, 'Festa'], [4, 'Tots Sants'], [5, '']],
+            array_map(fn(holiday_entry $e): array => [$e->line, $e->label], $result->entries)
+        );
+    }
+
+    /**
      * Blank lines and lines starting with # are skipped, but still counted for line numbers.
      *
      * @covers \local_classprogress\local\holiday_parser
@@ -132,6 +186,15 @@ final class holiday_parser_test extends \basic_testcase {
             'end of period does not exist' => ['2026-12-22 to 2027-02-30 Nadal', holiday_parser::NO_SUCH_DATE],
             'end before start' => ['2027-01-07 to 2026-12-22 Nadal', holiday_parser::END_BEFORE_START],
             'end one day before start' => ['08/12/2026 - 07/12/2026', holiday_parser::END_BEFORE_START],
+            'period end with one-digit month' => ['2026-12-22 to 2027-1-07 Nadal', holiday_parser::BAD_END_DATE],
+            'period end without year' => ['2026-12-07 a 08/12 pont', holiday_parser::BAD_END_DATE],
+            'TO in capitals, end in wrong order' => ['2026-12-22 TO 2027/01/07', holiday_parser::BAD_END_DATE],
+            'en dash, end with two-digit year' => ['22/12/2026 – 7/1/27 Nadal', holiday_parser::BAD_END_DATE],
+            'em dash, end with one-digit day' => ['2026-12-22 — 2027-01-7', holiday_parser::BAD_END_DATE],
+            'hyphen without spaces' => ['2026-12-22-2027-1-07 Nadal', holiday_parser::BAD_END_DATE],
+            'two dots' => ['2026-12-22..2027-1-07', holiday_parser::BAD_END_DATE],
+            'arrow' => ['2026-12-22 → 2027-1-07', holiday_parser::BAD_END_DATE],
+            'start that does not exist comes first' => ['2026-02-30 to 2027-1-07', holiday_parser::NO_SUCH_DATE],
         ];
     }
 

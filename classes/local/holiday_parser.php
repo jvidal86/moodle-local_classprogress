@@ -35,6 +35,9 @@ final class holiday_parser {
     /** @var string Reason code: the period ends before it starts. */
     public const END_BEFORE_START = 'end_before_start';
 
+    /** @var string Reason code: a range word or dash and a digit follow the date, but no valid end date, as in 2027-1-07. */
+    public const BAD_END_DATE = 'bad_end_date';
+
     /** @var string One date as written: yyyy-mm-dd or dd/mm/yyyy (day and month may have one digit). */
     private const DATE = '([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})';
 
@@ -51,6 +54,10 @@ final class holiday_parser {
         $entries = [];
         $errors = [];
         $pattern = '~^' . self::DATE . '\s*(?:' . self::SEPARATOR . '\s*' . self::DATE . ')?\s*(.*)$~iu';
+        $mistypedend = '~^' . self::SEPARATOR . '\s*[0-9]~iu';
+        if (strncmp($text, "\u{FEFF}", 3) === 0) {
+            $text = substr($text, 3);
+        }
         $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $text));
         foreach ($lines as $index => $raw) {
             $line = self::trim($raw);
@@ -64,12 +71,15 @@ final class holiday_parser {
             }
             $start = self::to_iso($m[1]);
             $end = $m[2] === '' ? $start : self::to_iso($m[2]);
+            $label = self::trim($m[3]);
             if ($start === null || $end === null) {
                 $errors[] = new holiday_error($number, self::NO_SUCH_DATE, $line);
+            } else if ($m[2] === '' && preg_match($mistypedend, $label) === 1) {
+                $errors[] = new holiday_error($number, self::BAD_END_DATE, $line);
             } else if ($end < $start) {
                 $errors[] = new holiday_error($number, self::END_BEFORE_START, $line);
             } else {
-                $entries[] = new holiday_entry($number, $start, $end, self::trim($m[3]));
+                $entries[] = new holiday_entry($number, $start, $end, $label);
             }
         }
         return new holiday_parse_result($entries, $errors);
