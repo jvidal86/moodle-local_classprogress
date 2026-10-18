@@ -195,7 +195,7 @@ A privacy export for a user contains their school years, holidays and evaluation
 
 ### REQ-PRV-003 Erase
 Phase: M1 · Status: agreed
-Erasing a user deletes their school years, holidays and evaluation periods with everything that is only theirs. In plan activities, which are a course's shared record, their authorship is anonymised (their user id in entries and history replaced by the deleted-user placeholder) and the content stays, so the course's record for the inspection remains complete; the activity's data is fully deleted only with the activity or the course. Other users' data is untouched. **New rule for the teacher to check (2026-10-18).**
+Erasing a user deletes their school years, holidays and evaluation periods with everything that is only theirs. In plan activities, which are a course's shared record, their authorship is anonymised (their user id in entries and history replaced by the deleted-user placeholder) and the content stays, so the course's record for the inspection remains complete; the activity's data is fully deleted only with the activity or the course. Other users' data is untouched. Agreed by the teacher 2026-10-18.
 
 ### REQ-PRV-004 Account deletion
 Phase: M1 · Status: agreed
@@ -259,34 +259,34 @@ History rows are never edited and survive the deletion of their entry. The histo
 
 ---
 
-## MOD · Course activity (M3) · drafted 2026-10-18, awaiting acceptance
+## MOD · Course activity (M3) · agreed 2026-10-18
 
 ### REQ-MOD-001 Added from the activity chooser
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 "Class progress" appears in a course's "Add an activity or resource" list for users who may add it (editing teachers and managers). Its settings are the activity name, a school year (one of the adding teacher's school years), the weekly timetable and optional first and last class days chosen with date pickers. Each activity is one plan; the module code and title come from the imported text.
 
 ### REQ-MOD-002 Teachers only
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 The activity is visible on the course page and can be opened only by the course's teachers and managers (view and edit capabilities for `teacher`, `editingteacher` and `manager`). Students and other users neither see it on the course page nor can open its pages by URL.
 
 ### REQ-MOD-003 Opening the activity
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 Opening a draft activity leads to its import and preview (M2 behaviour); opening an approved one leads to its daily log (REQ-LOG-*). The plan's days are visible from both.
 
 ### REQ-MOD-004 Shared by the course's teachers
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 Every teacher of the course holding the edit capability can import, approve and log sessions in the activity; history rows and events record who acted (and the real user for "log in as").
 
 ### REQ-MOD-005 Top-menu overview
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 The top-menu "Class progress" page keeps the teacher's school years (holidays, evaluation periods) and lists every plan activity the teacher can open, across courses, with its course, status and number of pending sessions, linking to each.
 
 ### REQ-MOD-006 Backup and restore
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 A course backup always contains the activity's plan, timetable, days, imports and copied holidays and evaluation periods; entries and history only when the backup includes user data. A restored approved plan is complete on its own; a restored draft asks for a school year (REQ-DAT-006).
 
 ### REQ-MOD-007 Deletion and reset
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 Deleting the activity (or the course) deletes all its data. A course reset that removes user data deletes the activity's entries and history and keeps the plan.
 
 ---
