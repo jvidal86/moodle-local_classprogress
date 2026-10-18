@@ -301,4 +301,73 @@ final class holiday_parser_test extends \basic_testcase {
         $this->assertCount(39, $expected);
         $this->assertSame($expected, holiday_parser::expand($result->entries));
     }
+
+    /**
+     * Lines with a date outside 2000-01-01 to 2099-12-31 or a period longer than 400 days, with the code each must get.
+     *
+     * @return array<string, array{string, string}> Line and expected code.
+     */
+    public static function out_of_limits_line_provider(): array {
+        return [
+            'last day of year 9999' => ['9999-12-31 Fi', holiday_parser::OUT_OF_RANGE],
+            'last day of year 9999, dd/mm/yyyy' => ['31/12/9999 Fi', holiday_parser::OUT_OF_RANGE],
+            'period ending in year 9999' => ['2026-12-22 to 9999-12-31 Nadal', holiday_parser::OUT_OF_RANGE],
+            'typo in the year' => ['2026-12-22 to 9027-01-07 Nadal', holiday_parser::OUT_OF_RANGE],
+            'the day before the window' => ['1999-12-31 Cap d\'any', holiday_parser::OUT_OF_RANGE],
+            'the day after the window' => ['01/01/2100', holiday_parser::OUT_OF_RANGE],
+            'out of range comes before end before start' => ['9999-12-31 to 2026-12-22', holiday_parser::OUT_OF_RANGE],
+            '401 days' => ['2026-09-01 to 2027-10-06 Massa', holiday_parser::TOO_LONG],
+            'the whole window' => ['2000-01-01 to 2099-12-31', holiday_parser::TOO_LONG],
+        ];
+    }
+
+    /**
+     * A date outside the window or a period longer than 400 days is a bad line, and the other lines are still read.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @dataProvider out_of_limits_line_provider
+     * @group REQ-HOL-002
+     * @group REQ-CAL-004
+     * @param string $line The holiday line.
+     * @param string $code Expected reason code.
+     */
+    public function test_line_outside_the_limits_is_reported(string $line, string $code): void {
+        $result = holiday_parser::parse("2026-10-12 Festa\n" . $line . "\n2026-12-08");
+
+        $this->assertSame(['2026-10-12', '2026-12-08'], array_map(fn(holiday_entry $e): string => $e->start, $result->entries));
+        $this->assertCount(1, $result->errors);
+        $this->assertSame([2, $code, $line], [$result->errors[0]->line, $result->errors[0]->code, $result->errors[0]->text]);
+    }
+
+    /**
+     * The window edges and a period of exactly 400 days are holidays.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-CAL-004
+     */
+    public function test_window_edges_and_400_days_are_holidays(): void {
+        $result = holiday_parser::parse("2000-01-01 Primer\n31/12/2099 Darrer\n2026-09-01 to 2027-10-05 Llarg");
+
+        $this->assertSame([], $result->errors);
+        $this->assertCount(3, $result->entries);
+        $this->assertCount(402, holiday_parser::expand($result->entries));
+    }
+
+    /**
+     * Expanding compares days as dates: an entry on the last day of year 9999 ends, and entries that the parser
+     * refuses (outside the window or longer than 400 days) give no days.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-CAL-004
+     */
+    public function test_expand_ends_and_leaves_out_entries_outside_the_limits(): void {
+        $entries = [
+            new holiday_entry(1, '9999-12-31', '9999-12-31', 'Fi'),
+            new holiday_entry(2, '0001-01-01', '9999-12-30', 'Tot'),
+            new holiday_entry(3, '2026-09-01', '2027-10-06', 'Massa'),
+            new holiday_entry(4, '2099-12-31', '2099-12-31', 'Darrer'),
+        ];
+
+        $this->assertSame(['2099-12-31' => 'Darrer'], holiday_parser::expand($entries));
+    }
 }

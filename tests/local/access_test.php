@@ -410,4 +410,42 @@ final class access_test extends \advanced_testcase {
         \core\session\manager::loginas($student->id, \context_system::instance(), false);
         $this->assertFalse(access::show_link());
     }
+
+    /**
+     * Requests to a delete page, and whether each confirms the delete.
+     *
+     * @return array Case => [confirm parameter or null, sesskey parameter: "own", "wrong" or null, expected].
+     */
+    public static function delete_confirmation_cases(): array {
+        return [
+            'confirm with the sesskey' => [1, 'own', true],
+            'confirm without a sesskey' => [1, null, false],
+            'confirm with a wrong sesskey' => [1, 'wrong', false],
+            'sesskey without confirm' => [null, 'own', false],
+            'nothing' => [null, null, false],
+        ];
+    }
+
+    /**
+     * A delete is confirmed only by confirm=1 with the user's sesskey; a missing sesskey, like a wrong one, shows the
+     * confirmation again instead of an exception page.
+     *
+     * @dataProvider delete_confirmation_cases
+     * @param int|null $confirm The confirm parameter, or null for none.
+     * @param string|null $sesskey "own" for the user's sesskey, "wrong" for another value, or null for none.
+     * @param bool $expected Whether the delete is confirmed.
+     */
+    public function test_delete_is_confirmed_only_with_the_sesskey(?int $confirm, ?string $sesskey, bool $expected): void {
+        $this->resetAfterTest();
+        $this->setUser($this->getDataGenerator()->create_user());
+        $_POST = [];
+        if ($confirm !== null) {
+            $_POST['confirm'] = $confirm;
+        }
+        if ($sesskey !== null) {
+            $_POST['sesskey'] = $sesskey === 'own' ? sesskey() : 'wrong';
+        }
+
+        $this->assertSame($expected, access::delete_confirmed());
+    }
 }

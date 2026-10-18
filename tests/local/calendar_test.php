@@ -312,4 +312,60 @@ final class calendar_test extends \basic_testcase {
     private static function school_holidays(): array {
         return holiday_parser::parse(file_get_contents(__DIR__ . '/../fixtures/holidays-centre-2026-27.txt'))->entries;
     }
+
+    /**
+     * Dates outside 2000-01-01 to 2099-12-31 and ranges longer than 400 days, with the code each must get.
+     *
+     * @return array<string, array{string, string, string}> First day, last day and expected code.
+     */
+    public static function out_of_limits_provider(): array {
+        return [
+            'last day of year 9999' => ['9999-12-31', '9999-12-31', calendar::OUT_OF_RANGE],
+            'one-digit typo in the last day' => ['2026-09-14', '9027-06-21', calendar::OUT_OF_RANGE],
+            'every four-digit year' => ['0001-01-01', '9999-12-30', calendar::OUT_OF_RANGE],
+            'the day before the window' => ['1999-12-31', '2000-01-10', calendar::OUT_OF_RANGE],
+            'the day after the window' => ['2099-12-01', '2100-01-01', calendar::OUT_OF_RANGE],
+            'out of range comes before reversed' => ['9999-12-31', '2026-09-14', calendar::OUT_OF_RANGE],
+            '401 days' => ['2026-09-01', '2027-10-06', calendar::TOO_LONG],
+            'reversed comes before too long' => ['2099-12-31', '2000-01-01', calendar::LAST_BEFORE_FIRST],
+        ];
+    }
+
+    /**
+     * A date outside the window or a range longer than 400 days gives an empty result with a code, at once.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @dataProvider out_of_limits_provider
+     * @group REQ-CAL-004
+     * @param string $first First class day.
+     * @param string $last Last class day.
+     * @param string $code Expected code.
+     */
+    public function test_dates_outside_the_limits_give_empty_result_with_code(string $first, string $last, string $code): void {
+        $result = calendar::compute($first, $last, [0 => 2, 1 => 2, 2 => 2, 3 => 2, 4 => 2], self::school_holidays());
+
+        $this->assertSame($code, $result->code);
+        $this->assertSame([], $result->sessions);
+        $this->assertSame([], $result->sessionspermonth);
+        $this->assertSame([], $result->lost);
+    }
+
+    /**
+     * The first and last days of the window and a range of exactly 400 days still give a calendar.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-004
+     */
+    public function test_window_edges_and_400_days_give_a_calendar(): void {
+        $first = calendar::compute('2000-01-01', '2000-01-07', [0 => 1], []);
+        $last = calendar::compute('2099-12-25', '2099-12-31', [0 => 1], []);
+        $long = calendar::compute('2026-09-01', '2027-10-05', [0 => 1], []);
+
+        $this->assertSame([['2000-01-03', 1.0]], self::pairs($first));
+        $this->assertSame([['2099-12-28', 1.0]], self::pairs($last));
+        $this->assertSame(['2099-12' => 1], $last->sessionspermonth);
+        $this->assertNull($long->code);
+        $this->assertCount(57, $long->sessions);
+        $this->assertCount(14, $long->sessionspermonth);
+    }
 }

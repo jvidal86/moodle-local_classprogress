@@ -71,6 +71,44 @@ Feature: Set up a school year and a plan
     And I should see "20" in the "MP 0372 · Gestió de bases de dades" "table_row"
     And I should see "40" in the "MP 0372 · Gestió de bases de dades" "table_row"
 
+  @REQ-DAT-003 @REQ-DAT-004
+  Scenario: Text with <, > and & is kept and shown as typed, and a save from a stale form is refused
+    Given I am on the "local_classprogress > Home" page logged in as "teacher1"
+    And I click on "New school year" "link"
+    And I set the following fields to these values:
+      | Name      | Curs <2026> & co |
+      | First day | 2026-09-14       |
+      | Last day  | 2027-06-21       |
+    And I set the field "Holidays and non-teaching days" to multiline:
+      """
+      2026-12-07 Pont <- Immaculada
+      2026-12-08 La Immaculada
+      """
+    And I press "Save changes"
+    And I should see "Curs <2026> & co"
+    And I should see "Holidays: 2. Evaluation periods: 0."
+    And I click on "New plan" "link"
+    And I set the following fields to these values:
+      | Module code     | MP<03>                   |
+      | Module title    | Programació <C++> i Java |
+      | First class day | 2026-12-01               |
+      | Last class day  | 2026-12-15               |
+      | Monday          | 2                        |
+      | Tuesday         | 2                        |
+    And I press "Save changes"
+    Then I should see "Plan saved."
+    And I should see "MP<03> · Programació <C++> i Java"
+    And I should see "3 sessions, 6 hours of class"
+    And I should see "1" in the "Pont <- Immaculada" "table_row"
+    And I am on the "Curs <2026> & co" "local_classprogress > School year" page
+    And the school year "Curs <2026> & co" is changed elsewhere
+    And I set the field "Name" to "Curs 2026-27"
+    And I press "Save changes"
+    And I should see "This was changed elsewhere; reload to see the latest version"
+    And I am on the "local_classprogress > Home" page
+    And I should see "Curs <2026> & co"
+    And I should not see "Curs 2026-27"
+
   @REQ-ACC-002
   Scenario: Every page refuses a user without the capability, and a teacher reaches them from the top bar
     Given the following "users" exist:

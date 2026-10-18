@@ -20,7 +20,6 @@ use local_classprogress\local\calendar_result;
 use local_classprogress\local\calendar_session;
 use local_classprogress\local\holiday_entry;
 use local_classprogress\local\plan_service;
-use local_classprogress\local\schoolyear_service;
 
 /**
  * The calendar of a plan: sessions, hours, sessions per month and sessions lost to each holiday.
@@ -56,7 +55,7 @@ final class calendar_view implements \renderable, \templatable {
     public static function for_plan(int $userid, \stdClass $plan): self {
         return new self(
             plan_service::calendar($userid, (int) $plan->id),
-            schoolyear_service::holidays($userid, (int) $plan->schoolyearid)
+            plan_service::holidays($userid, (int) $plan->id)
         );
     }
 
@@ -88,10 +87,7 @@ final class calendar_view implements \renderable, \templatable {
         }
         return (object) [
             'message' => null,
-            'summary' => get_string('calendarsummary', 'local_classprogress', (object) [
-                'sessions' => count($result->sessions),
-                'hours' => format_float($result->totalhours, 2, true, true),
-            ]),
+            'summary' => self::summary(count($result->sessions), $result->totalhours),
             'months' => $months,
             'hasholidays' => !empty($holidays),
             'holidays' => $holidays,
@@ -102,6 +98,21 @@ final class calendar_view implements \renderable, \templatable {
                 'hours' => format_float($s->hours, 2, true, true),
             ], $result->sessions),
         ];
+    }
+
+    /**
+     * Writes the number of sessions and hours, in the singular for exactly one.
+     *
+     * @param int $sessions Number of sessions.
+     * @param float $hours Total hours.
+     * @return string Such as "60 sessions, 120 hours of class" or "1 session, 1.5 hours of class".
+     */
+    private static function summary(int $sessions, float $hours): string {
+        $formatted = format_float($hours, 2, true, true);
+        return get_string('calendarsummary', 'local_classprogress', (object) [
+            'sessions' => get_string($sessions === 1 ? 'summarysessionsone' : 'summarysessions', 'local_classprogress', $sessions),
+            'hours' => get_string($hours == 1.0 ? 'summaryhoursone' : 'summaryhours', 'local_classprogress', $formatted),
+        ]);
     }
 
     /**

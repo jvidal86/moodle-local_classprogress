@@ -28,13 +28,13 @@ final class holiday_error {
      * Constructor.
      *
      * @param int $line Line number in the holiday text, starting at 1.
-     * @param string $code Reason: holiday_parser::NOT_A_DATE, NO_SUCH_DATE or END_BEFORE_START.
+     * @param string $code Reason: a holiday_parser constant, or schoolyear_service::LABEL_TOO_LONG.
      * @param string $text The line as written, trimmed.
      */
     public function __construct(
         /** @var int Line number in the holiday text, starting at 1. */
         public readonly int $line,
-        /** @var string Reason: holiday_parser::NOT_A_DATE, NO_SUCH_DATE or END_BEFORE_START. */
+        /** @var string Reason: a holiday_parser constant, or schoolyear_service::LABEL_TOO_LONG. */
         public readonly string $code,
         /** @var string The line as written, trimmed. */
         public readonly string $text,

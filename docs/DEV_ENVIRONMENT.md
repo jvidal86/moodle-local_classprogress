@@ -197,8 +197,15 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    cd ~/PROJECTS/class-progress-tracking
    ~/moodle-dev/ci/bin/moodle-plugin-ci phplint .
    ~/moodle-dev/ci/bin/moodle-plugin-ci phpcs --max-warnings 0 .
-   ~/moodle-dev/ci/bin/moodle-plugin-ci mustache .
    ~/moodle-dev/ci/bin/moodle-plugin-ci savepoints .
+
+   # mustache needs the plugin inside a Moodle tree (it loads core_component from it) and Java for the HTML
+   # validator. The containers have no Java, and on the host ~/moodle-dev/moodle405/local/classprogress is only the
+   # empty mount point, so lint a scratch copy of Moodle with the plugin copied in (host Java 21; verified in R1,
+   # 2026-10-18: "OK: Mustache rendered html succesfully" for both templates, exit 0). CI runs it on every push too.
+   m=$(mktemp -d) && (cd ~/moodle-dev/moodle405 && tar --exclude=./.git --exclude=./local/classprogress -cf - .) | tar -xf - -C "$m"
+   mkdir -p "$m/local/classprogress" && git ls-files -co --exclude-standard | grep -v '^tools/host-phpunit/vendor' | tar -cf - -T - | tar -xf - -C "$m/local/classprogress"
+   ~/moodle-dev/ci/bin/moodle-plugin-ci mustache --moodle "$m" "$m/local/classprogress"; rm -rf "$m"
 
    # validate, phpdoc and phpunit load Moodle's config.php, so they run in the webserver container, on the mounted
    # plugin (4.5 shown; 5.3: cp503-webserver-1 and /var/www/html/public/local/classprogress).

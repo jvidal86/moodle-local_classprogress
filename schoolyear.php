@@ -45,11 +45,11 @@ $PAGE->set_heading(get_string('pluginname', 'local_classprogress'));
 $PAGE->navbar->add(get_string('pluginname', 'local_classprogress'), $indexurl);
 
 $year = $id ? schoolyear_service::get($USER->id, $id) : null;
-$name = $year ? format_string($year->name, true, ['context' => $context]) : '';
+$name = $year ? s($year->name) : '';
 
 if ($year && $action === 'delete') {
     $title = get_string('deleteschoolyear', 'local_classprogress');
-    if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
+    if (\local_classprogress\local\access::delete_confirmed()) {
         schoolyear_service::delete($USER->id, $id);
         redirect($indexurl, get_string('schoolyeardeleted', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
     }
@@ -78,22 +78,36 @@ $PAGE->navbar->add($title);
 
 $evaluations = $year ? schoolyear_service::evaluations($USER->id, $id) : [];
 $form = new schoolyear_form($url, ['evaluationcount' => count($evaluations)]);
+$stale = false;
 if ($form->is_cancelled()) {
     redirect($indexurl);
 } else if ($data = $form->get_data()) {
     $yeardata = schoolyear_form::to_service_data($data);
-    if ($year) {
-        schoolyear_service::update($USER->id, $id, $yeardata);
-    } else {
-        schoolyear_service::create($USER->id, $yeardata);
+    try {
+        if ($year) {
+            schoolyear_service::update($USER->id, $id, $yeardata);
+        } else {
+            schoolyear_service::create($USER->id, $yeardata);
+        }
+    } catch (\moodle_exception $e) {
+        if ($e->errorcode !== 'error_changedelsewhere') {
+            throw $e;
+        }
+        // Nothing was saved; the form keeps what the teacher typed, and the message asks them to reload.
+        $stale = true;
     }
-    redirect($indexurl, get_string('schoolyearsaved', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
+    if (!$stale) {
+        redirect($indexurl, get_string('schoolyearsaved', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
+    }
 }
-if ($year) {
+if ($year && !$stale) {
     $form->set_data(schoolyear_form::from_record($year, schoolyear_service::holidays($USER->id, $id), $evaluations));
 }
 
 echo $OUTPUT->header();
 echo $OUTPUT->heading($year ? $name : $title);
+if ($stale) {
+    echo $OUTPUT->notification(get_string('error_changedelsewhere', 'local_classprogress'), notification::NOTIFY_ERROR);
+}
 $form->display();
 echo $OUTPUT->footer();

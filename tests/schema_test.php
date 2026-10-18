@@ -149,6 +149,52 @@ final class schema_test extends \advanced_testcase {
     }
 
     /**
+     * Upgrading from the M0 skeleton (2026101800), which had no tables, creates every missing table of install.xml,
+     * leaves the existing ones as they are and reaches the current version.
+     *
+     * @group REQ-DAT-001
+     * @group REQ-DAT-005
+     */
+    public function test_upgrade_from_m0_creates_every_missing_table(): void {
+        global $CFG, $DB;
+        $this->resetAfterTest();
+        // Changes of the schema are not undone by a rollback on MariaDB, so the test does not run in a transaction.
+        $this->preventResetByRollback();
+        require_once(\core_component::get_component_directory('local_classprogress') . '/db/upgrade.php');
+        require_once($CFG->libdir . '/upgradelib.php');
+        $dbman = $DB->get_manager();
+        $plugin = new \stdClass();
+        require(\core_component::get_component_directory('local_classprogress') . '/version.php');
+        $missing = [self::PREFIX . 'import', self::PREFIX . 'entry_hist'];
+        $this->getDataGenerator()->get_plugin_generator('local_classprogress')->create_schoolyear();
+
+        try {
+            foreach ($missing as $table) {
+                $dbman->drop_table(new \xmldb_table($table));
+            }
+            set_config('version', 2026101800, 'local_classprogress');
+
+            $this->assertTrue(xmldb_local_classprogress_upgrade(2026101800));
+            $created = array_values(array_filter($missing, fn(string $table): bool => $dbman->table_exists($table)));
+        } finally {
+            // Leaves the schema whole for the other tests, whatever happened above.
+            foreach ($missing as $table) {
+                if (!$dbman->table_exists($table)) {
+                    $dbman->install_one_table_from_xmldb_file(
+                        \core_component::get_component_directory('local_classprogress') . '/db/install.xml',
+                        $table
+                    );
+                }
+            }
+        }
+
+        $this->assertSame($missing, $created);
+        $this->assertSame([], $dbman->check_database_schema(self::install_xml(), ['extratables' => false]));
+        $this->assertSame(1, $DB->count_records(self::PREFIX . 'schoolyear'));
+        $this->assertSame((string) $plugin->version, (string) get_config('local_classprogress', 'version'));
+    }
+
+    /**
      * Several entries without a plan item (unplanned sessions) are allowed in one plan.
      *
      * @group REQ-DAT-002

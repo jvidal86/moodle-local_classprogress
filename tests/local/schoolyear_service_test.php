@@ -301,6 +301,7 @@ final class schoolyear_service_test extends \advanced_testcase {
         return [
             'empty name' => [['name' => '  '], ['name' => 'error_name']],
             'name too long' => [['name' => str_repeat('a', 256)], ['name' => 'error_name']],
+            'name on two lines' => [['name' => "Curs\n2026-2027"], ['name' => 'error_name']],
             'date not ISO' => [['startdate' => '14/09/2026'], ['startdate' => 'error_baddate']],
             'no such date' => [['enddate' => '2027-02-30'], ['enddate' => 'error_baddate']],
             'date with extra text' => [['startdate' => '2026-09-14x'], ['startdate' => 'error_baddate']],
@@ -426,6 +427,176 @@ final class schoolyear_service_test extends \advanced_testcase {
         $this->assertTrue($DB->record_exists('local_classprogress_schoolyear', ['id' => $id]));
         $this->assertSame(2, $DB->count_records('local_classprogress_holiday', ['schoolyearid' => $id]));
         $this->assertSame(1, schoolyear_service::count_plans($user->id, $id));
+    }
+
+    /**
+     * School year data with dates outside 2000-01-01 to 2099-12-31 or longer than 400 days, and the errors it gets.
+     *
+     * @return array Case name => [fields to replace, expected errors].
+     */
+    public static function out_of_limits_cases(): array {
+        $eval = fn(string $name, string $start, string $end): \stdClass =>
+            (object) ['name' => $name, 'startdate' => $start, 'enddate' => $end];
+        return [
+            'start before the window' => [
+                ['startdate' => '1999-09-14', 'evaluations' => []],
+                ['startdate' => 'error_daterange'],
+            ],
+            'one-digit typo in the last day' => [['enddate' => '9027-06-21'], ['enddate' => 'error_daterange']],
+            'every four-digit year' => [
+                ['startdate' => '0001-01-01', 'enddate' => '9999-12-30'],
+                ['startdate' => 'error_daterange', 'enddate' => 'error_daterange'],
+            ],
+            'the last day of year 9999' => [
+                ['startdate' => '9999-12-31', 'enddate' => '9999-12-31'],
+                ['startdate' => 'error_daterange', 'enddate' => 'error_daterange'],
+            ],
+            '401 days' => [
+                ['startdate' => '2026-09-01', 'enddate' => '2027-10-06'],
+                ['enddate' => 'error_yeartoolong'],
+            ],
+            'evaluation outside the window when the year is not valid' => [
+                ['startdate' => 'x', 'evaluations' => [$eval('1a', '9999-12-01', '9999-12-31')]],
+                ['startdate' => 'error_baddate', 'evaluations-0' => 'error_daterange'],
+            ],
+            'holiday in year 9999' => [['holidays' => "2026-10-12 Festa\n9999-12-31 Fi"], ['holidays' => 'error_holidaylines']],
+            'holiday period of 401 days' => [
+                ['holidays' => '2026-09-01 to 2027-10-06 Massa'],
+                ['holidays' => 'error_holidaylines'],
+            ],
+        ];
+    }
+
+    /**
+     * Dates outside the window and school years longer than 400 days are reported and refused; nothing is stored.
+     *
+     * @dataProvider out_of_limits_cases
+     * @group REQ-CAL-004
+     * @param array $fields Fields to replace in valid data.
+     * @param array $expected Expected errors, field => lang string id.
+     */
+    public function test_dates_outside_the_limits_are_refused(array $fields, array $expected): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $data = self::yeardata($fields);
+
+        $this->assertSame($expected, schoolyear_service::validate($data));
+        try {
+            schoolyear_service::create($user->id, $data);
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame(reset($expected), $e->errorcode);
+        }
+        $this->assertSame(0, $DB->count_records('local_classprogress_schoolyear'));
+    }
+
+    /**
+     * The window edges and a school year of exactly 400 days are accepted.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_window_edges_and_400_days_are_accepted(): void {
+        $year = fn(string $start, string $end): \stdClass => self::yeardata([
+            'startdate' => $start,
+            'enddate' => $end,
+            'holidays' => "2000-01-01 Primer\n31/12/2099 Darrer",
+            'evaluations' => [],
+        ]);
+
+        $this->assertSame([], schoolyear_service::validate($year('2000-01-01', '2000-12-31')));
+        $this->assertSame([], schoolyear_service::validate($year('2099-01-01', '2099-12-31')));
+        $this->assertSame([], schoolyear_service::validate($year('2026-09-01', '2027-10-05')));
+    }
+
+    /**
+     * Shrinking a school year without sending its evaluation periods checks the stored ones against the new dates.
+     */
+    public function test_update_without_evaluations_checks_the_stored_ones(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $id = schoolyear_service::create($user->id, self::yeardata());
+
+        try {
+            schoolyear_service::update($user->id, $id, (object) [
+                'name' => 'Curs 2026-2027',
+                'startdate' => '2027-01-08',
+                'enddate' => '2027-06-21',
+            ]);
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_evaluationoutsideyear', $e->errorcode);
+        }
+        $this->assertSame('2026-09-14', schoolyear_service::get($user->id, $id)->startdate);
+
+        schoolyear_service::update($user->id, $id, (object) [
+            'name' => 'Curs 2026-2027',
+            'startdate' => '2026-09-01',
+            'enddate' => '2027-06-30',
+        ]);
+        $this->assertSame('2026-09-01', schoolyear_service::get($user->id, $id)->startdate);
+        $this->assertCount(3, schoolyear_service::evaluations($user->id, $id));
+    }
+
+    /**
+     * A save made from a version older than the stored one is refused and changes nothing; a save from the current
+     * version is accepted and makes a newer version, even within the same second.
+     *
+     * @group REQ-DAT-003
+     */
+    public function test_a_save_from_an_older_version_is_refused(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $id = schoolyear_service::create($user->id, self::yeardata());
+        $opened = (int) schoolyear_service::get($user->id, $id)->timemodified;
+
+        schoolyear_service::update($user->id, $id, self::yeardata([
+            'holidays' => "2026-10-12 Festa Nacional\n2026-12-22 to 2027-01-07 Vacances de Nadal\n2027-05-01 Treball",
+            'timemodified' => $opened,
+        ]));
+        $saved = schoolyear_service::get($user->id, $id);
+        $this->assertGreaterThan($opened, (int) $saved->timemodified);
+
+        try {
+            schoolyear_service::update($user->id, $id, self::yeardata(['name' => 'Stale tab', 'timemodified' => $opened]));
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_changedelsewhere', $e->errorcode);
+            $this->assertSame('This was changed elsewhere; reload to see the latest version', $e->getMessage());
+        }
+        $this->assertEquals($saved, schoolyear_service::get($user->id, $id));
+        $this->assertCount(3, schoolyear_service::holidays($user->id, $id));
+    }
+
+    /**
+     * Deleting a school year takes the school year's lock: while another request holds it, nothing is deleted.
+     *
+     * The file lock factory is used because the database ones let the same connection take a lock twice.
+     *
+     * @group REQ-DAT-006
+     */
+    public function test_delete_waits_for_the_school_year_lock(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $CFG->lock_factory = '\core\lock\file_lock_factory';
+        $user = $this->teacher();
+        $id = schoolyear_service::create($user->id, self::yeardata());
+        $lock = schoolyear_service::lock($id);
+
+        try {
+            schoolyear_service::delete($user->id, $id);
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('locktimeout', $e->errorcode);
+        } finally {
+            $lock->release();
+        }
+        $this->assertTrue($DB->record_exists('local_classprogress_schoolyear', ['id' => $id]));
+
+        schoolyear_service::delete($user->id, $id);
+        $this->assertFalse($DB->record_exists('local_classprogress_schoolyear', ['id' => $id]));
     }
 
     /**

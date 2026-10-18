@@ -34,6 +34,7 @@ class entry_deleted extends entry_event {
      *
      * @return string Localised name.
      */
+    #[\Override]
     public static function get_name(): string {
         return get_string('evententrydeleted', 'local_classprogress');
     }
@@ -43,6 +44,7 @@ class entry_deleted extends entry_event {
      *
      * @return string Non-localised description.
      */
+    #[\Override]
     public function get_description(): string {
         return "The user with id '{$this->userid}' deleted the entry with id '{$this->objectid}' " .
             "in the plan with id '{$this->other['planid']}'.";

@@ -24,6 +24,9 @@ use local_classprogress\local\schoolyear_service;
 /**
  * The landing page: the teacher's school years, each with its plans, their dates and their number of sessions.
  *
+ * Names are exported as typed, for the template to escape. A plan whose school year is missing, which should never
+ * happen, is listed apart so that it can still be opened or deleted.
+ *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -32,15 +35,12 @@ final class index_page implements \renderable, \templatable {
     /**
      * Constructor.
      *
-     * @param \context $context Context for formatting names.
-     * @param \stdClass[] $years School year rows, in display order, each with holidaycount and evaluationcount added.
+     * @param \stdClass[] $years School year rows keyed by id, in display order, each with holidaycount and evaluationcount.
      * @param \stdClass[] $plans Plan rows.
      * @param calendar_result[] $calendars Plan id => calendar.
      * @param string[] $courses Course id => full name, for the courses the plans are linked to.
      */
     public function __construct(
-        /** @var \context Context for formatting names. */
-        private readonly \context $context,
         /** @var \stdClass[] School year rows, in display order, with holidaycount and evaluationcount. */
         private readonly array $years,
         /** @var \stdClass[] Plan rows. */
@@ -56,10 +56,9 @@ final class index_page implements \renderable, \templatable {
      * Reads everything the page shows for one user.
      *
      * @param int $userid The acting user.
-     * @param \context $context Context for formatting names.
      * @return self The page.
      */
-    public static function for_user(int $userid, \context $context): self {
+    public static function for_user(int $userid): self {
         global $DB;
 
         $years = schoolyear_service::list($userid);
@@ -71,7 +70,6 @@ final class index_page implements \renderable, \templatable {
         $courseids = array_unique(array_filter(array_column($plans, 'courseid')));
         $courses = $courseids ? $DB->get_records_list('course', 'id', $courseids, '', 'id, fullname') : [];
         return new self(
-            $context,
             $years,
             $plans,
             plan_service::calendars($userid, array_keys($plans)),
@@ -83,15 +81,13 @@ final class index_page implements \renderable, \templatable {
      * The name of a plan: its module code and title.
      *
      * @param \stdClass $plan Plan row.
-     * @param \context $context Context for formatting.
-     * @return string Formatted name, safe to print.
+     * @return string The name as typed, not escaped: print it with s() or {{ }}.
      */
-    public static function plan_name(\stdClass $plan, \context $context): string {
-        $name = $plan->moduletitle;
-        if ($plan->modulecode !== '') {
-            $name = get_string('planname', 'local_classprogress', (object) ['code' => $plan->modulecode, 'title' => $name]);
+    public static function plan_name(\stdClass $plan): string {
+        if ($plan->modulecode === '') {
+            return $plan->moduletitle;
         }
-        return format_string($name, true, ['context' => $context]);
+        return get_string('planname', 'local_classprogress', (object) ['code' => $plan->modulecode, 'title' => $plan->moduletitle]);
     }
 
     /**
@@ -107,7 +103,7 @@ final class index_page implements \renderable, \templatable {
             $yearurl = new url('/local/classprogress/schoolyear.php', ['id' => $year->id]);
             $plans = array_filter($this->plans, fn(\stdClass $plan): bool => (int) $plan->schoolyearid === (int) $year->id);
             $years[] = [
-                'name' => format_string($year->name, true, ['context' => $this->context]),
+                'name' => $year->name,
                 'dates' => self::dates($year->startdate, $year->enddate),
                 'counts' => get_string('schoolyearcounts', 'local_classprogress', (object) [
                     'holidays' => $year->holidaycount,
@@ -120,10 +116,13 @@ final class index_page implements \renderable, \templatable {
                 'plans' => array_values(array_map(fn(\stdClass $plan): array => $this->export_plan($plan), $plans)),
             ];
         }
+        $orphans = array_filter($this->plans, fn(\stdClass $plan): bool => !isset($this->years[$plan->schoolyearid]));
         return (object) [
             'addyearurl' => (new url('/local/classprogress/schoolyear.php'))->out(false),
             'hasyears' => !empty($years),
             'years' => $years,
+            'hasorphans' => !empty($orphans),
+            'orphans' => array_values(array_map(fn(\stdClass $plan): array => $this->export_plan($plan), $orphans)),
         ];
     }
 
@@ -138,7 +137,7 @@ final class index_page implements \renderable, \templatable {
         $course = $this->courses[$plan->courseid ?? 0] ?? null;
         $courseid = (int) ($plan->courseid ?? 0);
         return [
-            'name' => self::plan_name($plan, $this->context),
+            'name' => self::plan_name($plan),
             'course' => $course === null ? '' : format_string($course, true, ['context' => \context_course::instance($courseid)]),
             'dates' => $plan->startdate && $plan->enddate ? self::dates($plan->startdate, $plan->enddate) : '',
             'sessions' => $calendar->code === null ? count($calendar->sessions) : '',

@@ -43,6 +43,7 @@ class plan_approved extends base {
      *
      * @return array Key of other => [table the id points to, whether it may be null].
      */
+    #[\Override]
     protected static function other_ids(): array {
         return [
             'schoolyearid' => ['local_classprogress_schoolyear', false],
@@ -54,6 +55,7 @@ class plan_approved extends base {
      *
      * @return string Localised name.
      */
+    #[\Override]
     public static function get_name(): string {
         return get_string('eventplanapproved', 'local_classprogress');
     }
@@ -63,6 +65,7 @@ class plan_approved extends base {
      *
      * @return string Non-localised description.
      */
+    #[\Override]
     public function get_description(): string {
         return "The user with id '{$this->userid}' approved the plan with id '{$this->objectid}'.";
     }
@@ -72,6 +75,7 @@ class plan_approved extends base {
      *
      * @return \core\url The URL of the plan.
      */
+    #[\Override]
     public function get_url(): \core\url {
         return new \core\url('/local/classprogress/plan.php', ['id' => $this->objectid]);
     }

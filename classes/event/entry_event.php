@@ -42,6 +42,7 @@ abstract class entry_event extends base {
      *
      * @return array Key of other => [table the id points to, whether it may be null].
      */
+    #[\Override]
     protected static function other_ids(): array {
         return [
             'planid' => ['local_classprogress_plan', false],
@@ -54,6 +55,7 @@ abstract class entry_event extends base {
      *
      * @return \core\url The URL of the plan's log.
      */
+    #[\Override]
     public function get_url(): \core\url {
         return new \core\url('/local/classprogress/log.php', ['id' => $this->other['planid']]);
     }

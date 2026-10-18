@@ -32,5 +32,25 @@
  * @return bool True when every step succeeded.
  */
 function xmldb_local_classprogress_upgrade(int $oldversion): bool {
+    global $DB;
+
+    $dbman = $DB->get_manager();
+
+    if ($oldversion < 2026101805) {
+        // The M0 skeleton (2026101800) had no tables, and the versions that added them had no step: create every
+        // table of install.xml that is missing.
+        $file = __DIR__ . '/install.xml';
+        $xmldbfile = new xmldb_file($file);
+        if (!$xmldbfile->fileExists() || !$xmldbfile->loadXMLStructure()) {
+            throw new coding_exception('db/install.xml cannot be read');
+        }
+        foreach ($xmldbfile->getStructure()->getTables() as $table) {
+            if (!$dbman->table_exists($table->getName())) {
+                $dbman->install_one_table_from_xmldb_file($file, $table->getName());
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026101805, 'local', 'classprogress');
+    }
+
     return true;
 }

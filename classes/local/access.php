@@ -76,6 +76,18 @@ final class access {
     }
 
     /**
+     * Whether the request confirms a delete: confirm=1 with the user's sesskey.
+     *
+     * A missing sesskey counts as a wrong one, so the page shows its confirmation again instead of an error.
+     *
+     * @return bool True when the delete is confirmed.
+     */
+    public static function delete_confirmed(): bool {
+        $sesskey = optional_param('sesskey', '', PARAM_RAW);
+        return optional_param('confirm', 0, PARAM_BOOL) && $sesskey !== '' && confirm_sesskey($sesskey);
+    }
+
+    /**
      * Whether the top-bar link is shown to the current user.
      *
      * The answer is kept in the session cache, so a role given or removed later shows only after the next

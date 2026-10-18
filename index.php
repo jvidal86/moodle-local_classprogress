@@ -35,7 +35,7 @@ $PAGE->set_primary_active_tab('local_classprogress');
 $PAGE->set_title(get_string('pluginname', 'local_classprogress'));
 $PAGE->set_heading(get_string('pluginname', 'local_classprogress'));
 
-$page = \local_classprogress\output\index_page::for_user((int) $USER->id, $context);
+$page = \local_classprogress\output\index_page::for_user((int) $USER->id);
 
 echo $OUTPUT->header();
 echo $OUTPUT->render($page);

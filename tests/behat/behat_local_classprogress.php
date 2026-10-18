@@ -117,6 +117,20 @@ class behat_local_classprogress extends behat_base {
     }
 
     /**
+     * Changes a school year as another tab or session would, after the current page was opened.
+     *
+     * @Given the school year :name is changed elsewhere
+     *
+     * @param string $name Name of the school year.
+     */
+    public function the_school_year_is_changed_elsewhere(string $name): void {
+        global $DB;
+
+        $year = $DB->get_record('local_classprogress_schoolyear', ['name' => $name], '*', MUST_EXIST);
+        $DB->set_field('local_classprogress_schoolyear', 'timemodified', $year->timemodified + 1, ['id' => $year->id]);
+    }
+
+    /**
      * Opens a page, checks Moodle's error box on it, then goes back to the page shown before.
      *
      * Leaving is needed because the check that Behat runs after every step fails on any page with an error box.

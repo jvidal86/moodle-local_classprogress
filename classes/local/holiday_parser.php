@@ -38,6 +38,12 @@ final class holiday_parser {
     /** @var string Reason code: a range word or dash and a digit follow the date, but no valid end date, as in 2027-1-07. */
     public const BAD_END_DATE = 'bad_end_date';
 
+    /** @var string Reason code: a date lies outside dates::FIRST_DAY to dates::LAST_DAY. */
+    public const OUT_OF_RANGE = 'out_of_range';
+
+    /** @var string Reason code: the period is longer than dates::MAX_DAYS days. */
+    public const TOO_LONG = 'too_long';
+
     /** @var string One date as written: yyyy-mm-dd or dd/mm/yyyy (day and month may have one digit). */
     private const DATE = '([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})';
 
@@ -72,12 +78,17 @@ final class holiday_parser {
             $start = self::to_iso($m[1]);
             $end = $m[2] === '' ? $start : self::to_iso($m[2]);
             $label = self::trim($m[3]);
+            $range = $start === null || $end === null ? null : dates::check_range($start, $end);
             if ($start === null || $end === null) {
                 $errors[] = new holiday_error($number, self::NO_SUCH_DATE, $line);
+            } else if ($range === dates::OUT_OF_RANGE) {
+                $errors[] = new holiday_error($number, self::OUT_OF_RANGE, $line);
             } else if ($m[2] === '' && preg_match($mistypedend, $label) === 1) {
                 $errors[] = new holiday_error($number, self::BAD_END_DATE, $line);
-            } else if ($end < $start) {
+            } else if ($range === dates::REVERSED) {
                 $errors[] = new holiday_error($number, self::END_BEFORE_START, $line);
+            } else if ($range === dates::TOO_LONG) {
+                $errors[] = new holiday_error($number, self::TOO_LONG, $line);
             } else {
                 $entries[] = new holiday_entry($number, $start, $end, $label);
             }
@@ -88,7 +99,8 @@ final class holiday_parser {
     /**
      * Lists every holiday day of the given entries with its label.
      *
-     * When entries overlap, the first one in the list keeps the day, as in the Python reference.
+     * When entries overlap, the first one in the list keeps the day, as in the Python reference. Entries that parse()
+     * would refuse (a date that does not exist or lies outside the window, a period reversed or too long) give no day.
      *
      * @param holiday_entry[] $entries Entries, usually holiday_parse_result::$entries.
      * @return array<string, string> ISO date => label, sorted by date.
@@ -97,9 +109,16 @@ final class holiday_parser {
         $days = [];
         $utc = new \DateTimeZone('UTC');
         foreach ($entries as $entry) {
+            if (!dates::is_date($entry->start) || !dates::is_date($entry->end)) {
+                continue;
+            }
+            if (dates::check_range($entry->start, $entry->end) !== null) {
+                continue;
+            }
             $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $entry->start, $utc);
-            for ($iso = $entry->start; $iso <= $entry->end; $iso = $day->format('Y-m-d')) {
-                $days[$iso] ??= $entry->label;
+            $last = dates::day_number($entry->end);
+            for ($number = dates::day_number($entry->start); $number <= $last; $number++) {
+                $days[$day->format('Y-m-d')] ??= $entry->label;
                 $day = $day->modify('+1 day');
             }
         }

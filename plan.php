@@ -49,11 +49,11 @@ $PAGE->set_heading(get_string('pluginname', 'local_classprogress'));
 $PAGE->navbar->add(get_string('pluginname', 'local_classprogress'), $indexurl);
 
 $plan = $id ? plan_service::get($USER->id, $id) : null;
-$name = $plan ? index_page::plan_name($plan, $context) : '';
+$name = $plan ? s(index_page::plan_name($plan)) : '';
 
 if ($plan && $action === 'delete') {
     $title = get_string('deleteplan', 'local_classprogress');
-    if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
+    if (\local_classprogress\local\access::delete_confirmed()) {
         plan_service::delete($USER->id, $id);
         redirect($indexurl, get_string('plandeleted', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
     }
@@ -73,7 +73,7 @@ $PAGE->navbar->add($title);
 
 $years = [];
 foreach (schoolyear_service::list($USER->id) as $year) {
-    $years[$year->id] = format_string($year->name, true, ['context' => $context]);
+    $years[$year->id] = s($year->name);
 }
 if (!$years) {
     echo $OUTPUT->header();
@@ -91,37 +91,48 @@ if (!$years) {
     echo $OUTPUT->footer();
     exit;
 }
-$courses = [];
-foreach (plan_service::linkable_courses($USER->id) as $course) {
-    $courses[$course->id] = format_string($course->fullname, true, ['context' => \context_course::instance($course->id)]);
-}
+$courses = plan_form::course_options((int) $USER->id, $plan);
 
 $form = new plan_form($url, ['userid' => (int) $USER->id, 'years' => $years, 'courses' => $courses]);
+$stale = false;
 if ($form->is_cancelled()) {
     redirect($plan ? $url : $indexurl);
 } else if ($data = $form->get_data()) {
     $plandata = plan_form::to_service_data($data);
-    if ($plan) {
-        plan_service::update($USER->id, $id, $plandata);
-    } else {
-        $id = plan_service::create($USER->id, $plandata);
+    try {
+        if ($plan) {
+            plan_service::update($USER->id, $id, $plandata);
+        } else {
+            $id = plan_service::create($USER->id, $plandata);
+        }
+    } catch (\moodle_exception $e) {
+        if ($e->errorcode !== 'error_changedelsewhere') {
+            throw $e;
+        }
+        // Nothing was saved; the form keeps what the teacher typed, and the message asks them to reload.
+        $stale = true;
     }
-    redirect(
-        new \core\url('/local/classprogress/plan.php', ['id' => $id]),
-        get_string('plansaved', 'local_classprogress'),
-        null,
-        notification::NOTIFY_SUCCESS
-    );
+    if (!$stale) {
+        redirect(
+            new \core\url('/local/classprogress/plan.php', ['id' => $id]),
+            get_string('plansaved', 'local_classprogress'),
+            null,
+            notification::NOTIFY_SUCCESS
+        );
+    }
 }
-if ($plan) {
+if ($plan && !$stale) {
     $form->set_data(plan_form::from_record($plan, plan_service::timetable($USER->id, $id)));
-} else if (isset($years[$schoolyearid])) {
+} else if (!$plan && isset($years[$schoolyearid])) {
     $year = schoolyear_service::get($USER->id, $schoolyearid);
     $form->set_data(['schoolyearid' => $schoolyearid, 'startdate' => $year->startdate, 'enddate' => $year->enddate]);
 }
 
 echo $OUTPUT->header();
 echo $OUTPUT->heading($title);
+if ($stale) {
+    echo $OUTPUT->notification(get_string('error_changedelsewhere', 'local_classprogress'), notification::NOTIFY_ERROR);
+}
 if ($plan) {
     echo $OUTPUT->heading(get_string('calendar', 'local_classprogress'), 3);
     echo $OUTPUT->render(calendar_view::for_plan($USER->id, $plan));

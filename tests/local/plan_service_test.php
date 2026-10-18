@@ -181,6 +181,8 @@ final class plan_service_test extends \advanced_testcase {
             'empty title' => [['moduletitle' => ' '], ['moduletitle' => 'error_moduletitle']],
             'title too long' => [['moduletitle' => str_repeat('à', 256)], ['moduletitle' => 'error_moduletitle']],
             'code too long' => [['modulecode' => str_repeat('M', 101)], ['modulecode' => 'error_modulecode']],
+            'code on two lines' => [['modulecode' => "MP\n0372"], ['modulecode' => 'error_modulecode']],
+            'title with a control character' => [['moduletitle' => "Bases\x07 de dades"], ['moduletitle' => 'error_moduletitle']],
             'date not ISO' => [['startdate' => '14/09/2026'], ['startdate' => 'error_baddate']],
             'no such date' => [['enddate' => '2027-02-29'], ['enddate' => 'error_baddate']],
             'end before start' => [['enddate' => '2026-09-13'], ['enddate' => 'error_endbeforestart']],
@@ -448,6 +450,196 @@ final class plan_service_test extends \advanced_testcase {
         $this->assertSame(calendar::LAST_BEFORE_FIRST, $result->code);
         $this->assertSame([], $result->sessions);
         $this->assertSame(0.0, $result->totalhours);
+    }
+
+    /**
+     * A stored plan whose dates the forms no longer accept gives an empty calendar with a code, at once.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_calendar_of_stored_dates_outside_the_limits_is_empty_with_a_code(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $plan = $this->generator()->create_plan([
+            'userid' => $user->id, 'schoolyearid' => self::year($user->id), 'startdate' => '9999-12-31', 'enddate' => '9999-12-31',
+        ]);
+        $this->generator()->create_slot(['planid' => $plan->id, 'weekday' => 4, 'hours' => 2]);
+
+        $result = plan_service::calendar($user->id, $plan->id);
+
+        $this->assertSame(calendar::OUT_OF_RANGE, $result->code);
+        $this->assertSame([], $result->sessions);
+    }
+
+    /**
+     * Plan dates outside the window or outside the plan's school year, and the errors they get.
+     *
+     * @return array Case name => [fields to replace, expected errors].
+     */
+    public static function out_of_limits_cases(): array {
+        return [
+            'one-digit typo in the last day' => [['enddate' => '9027-06-21'], ['enddate' => 'error_daterange']],
+            'every four-digit year' => [
+                ['startdate' => '0001-01-01', 'enddate' => '9999-12-30'],
+                ['startdate' => 'error_daterange', 'enddate' => 'error_daterange'],
+            ],
+            'the last day of year 9999' => [
+                ['startdate' => '9999-12-31', 'enddate' => '9999-12-31'],
+                ['startdate' => 'error_daterange', 'enddate' => 'error_daterange'],
+            ],
+            'first day before the school year' => [['startdate' => '2026-09-13'], ['startdate' => 'error_dateoutsideyear']],
+            'last day after the school year' => [['enddate' => '2027-06-22'], ['enddate' => 'error_dateoutsideyear']],
+            'only the last day, after the school year' => [
+                ['startdate' => '', 'enddate' => '2028-01-10'],
+                ['enddate' => 'error_dateoutsideyear'],
+            ],
+        ];
+    }
+
+    /**
+     * Plan dates outside 2000-01-01 to 2099-12-31 or outside the school year are reported and refused.
+     *
+     * @dataProvider out_of_limits_cases
+     * @group REQ-CAL-004
+     * @param array $fields Fields to replace in valid data.
+     * @param array $expected Expected errors, field => lang string id.
+     */
+    public function test_dates_outside_the_limits_are_refused(array $fields, array $expected): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $data = self::plandata(self::year($user->id), $fields);
+
+        $this->assertSame($expected, plan_service::validate($user->id, $data));
+        try {
+            plan_service::create($user->id, $data);
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame(reset($expected), $e->errorcode);
+        }
+        $this->assertSame(0, $DB->count_records('local_classprogress_plan'));
+    }
+
+    /**
+     * Plan dates on the first and the last day of the school year are accepted.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_dates_on_the_edges_of_the_school_year_are_accepted(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+
+        $errors = plan_service::validate($user->id, self::plandata(self::year($user->id), [
+            'startdate' => '2026-09-14',
+            'enddate' => '2027-06-21',
+        ]));
+
+        $this->assertSame([], $errors);
+    }
+
+    /**
+     * A save made from a version older than the stored plan is refused and changes nothing.
+     *
+     * @group REQ-DAT-003
+     */
+    public function test_a_save_from_an_older_version_is_refused(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $yearid = self::year($user->id);
+        $id = plan_service::create($user->id, self::plandata($yearid));
+        $opened = (int) plan_service::get($user->id, $id)->timemodified;
+
+        plan_service::update($user->id, $id, self::plandata($yearid, ['timetable' => [0 => 2], 'timemodified' => $opened]));
+        $saved = plan_service::get($user->id, $id);
+        $this->assertGreaterThan($opened, (int) $saved->timemodified);
+
+        try {
+            plan_service::update($user->id, $id, self::plandata($yearid, ['moduletitle' => 'Stale', 'timemodified' => $opened]));
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_changedelsewhere', $e->errorcode);
+        }
+        $this->assertEquals($saved, plan_service::get($user->id, $id));
+        $this->assertSame([0 => 2.0], plan_service::timetable($user->id, $id));
+    }
+
+    /**
+     * Creating a plan takes the lock of its school year, the one a delete of that school year takes, so the school
+     * year cannot be deleted between the check and the insert.
+     *
+     * @group REQ-DAT-006
+     */
+    public function test_create_waits_for_the_school_year_lock(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $CFG->lock_factory = '\core\lock\file_lock_factory';
+        $user = $this->teacher();
+        $yearid = self::year($user->id);
+        $lock = schoolyear_service::lock($yearid);
+
+        try {
+            plan_service::create($user->id, self::plandata($yearid));
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('locktimeout', $e->errorcode);
+        } finally {
+            $lock->release();
+        }
+        $this->assertSame(0, $DB->count_records('local_classprogress_plan'));
+
+        plan_service::create($user->id, self::plandata($yearid));
+        $this->assertSame(1, $DB->count_records('local_classprogress_plan'));
+    }
+
+    /**
+     * The calendars of a plan whose school year is missing are computed without holidays instead of failing.
+     *
+     * @group REQ-DAT-006
+     */
+    public function test_calendars_of_a_plan_without_its_school_year(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $id = plan_service::create($user->id, self::plandata(self::year($user->id, '2026-10-12 Festa')));
+        $DB->delete_records('local_classprogress_schoolyear', ['id' => plan_service::get($user->id, $id)->schoolyearid]);
+
+        $calendars = plan_service::calendars($user->id, [$id]);
+
+        $this->assertNull($calendars[$id]->code);
+        $this->assertSame([], $calendars[$id]->lost);
+        $this->assertSame([], plan_service::holidays($user->id, $id));
+    }
+
+    /**
+     * Re-saving a plan keeps its course link when the teacher no longer teaches there; a new link must still be to a
+     * course where the teacher teaches.
+     */
+    public function test_update_keeps_an_unchanged_course_link(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $old = $this->getDataGenerator()->create_course();
+        $user = $this->teacher($old);
+        $other = $this->getDataGenerator()->create_course();
+        $yearid = self::year($user->id);
+        $id = plan_service::create($user->id, self::plandata($yearid, ['courseid' => $old->id]));
+        $roleid = $DB->get_field('role', 'id', ['shortname' => 'editingteacher']);
+        $this->getDataGenerator()->enrol_user($user->id, $this->getDataGenerator()->create_course()->id, 'editingteacher');
+        role_unassign($roleid, $user->id, \context_course::instance($old->id)->id);
+
+        $this->assertSame([], plan_service::validate($user->id, self::plandata($yearid, ['courseid' => $old->id]), $id));
+        plan_service::update($user->id, $id, self::plandata($yearid, ['courseid' => $old->id, 'moduletitle' => 'Nou']));
+
+        $this->assertSame((string) $old->id, (string) plan_service::get($user->id, $id)->courseid);
+        $this->assertSame(['courseid' => 'error_course'], plan_service::validate($user->id, self::plandata($yearid, [
+            'courseid' => $old->id,
+        ])));
+        $this->assertSame(['courseid' => 'error_course'], plan_service::validate($user->id, self::plandata($yearid, [
+            'courseid' => $other->id,
+        ]), $id));
     }
 
     /**

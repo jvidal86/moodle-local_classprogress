@@ -27,8 +27,10 @@ namespace local_classprogress\local;
  * Plan data, as taken by validate(), create() and update(): schoolyearid; courseid (0 or null for none); modulecode
  * (may be empty); moduletitle; startdate and enddate (ISO yyyy-mm-dd, or empty or null while unknown); optionally
  * timetable, weekday => hours with Monday = 0 to Sunday = 6, where 0 hours means no class. On update, data without a
- * timetable leaves it as it is. Importing the plan text and approving it come in a later phase; until then every plan
- * is a draft.
+ * timetable leaves it as it is, and data with timemodified, the version the change was made from, is refused when the
+ * stored plan is newer. The dates, when given, lie within the plan's school year. Creating a plan or moving it into a
+ * school year holds that school year's lock (schoolyear_service::lock()), so the school year cannot be deleted at the
+ * same moment. Importing the plan text and approving it come in a later phase; until then every plan is a draft.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -66,48 +68,65 @@ final class plan_service {
      * @param \stdClass $data Plan data (see the class description).
      * @return int The new plan id.
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception With the first error of validate() when the data is not valid.
+     * @throws \moodle_exception With the first error of validate() when the data is not valid, or locktimeout.
      */
     public static function create(int $userid, \stdClass $data): int {
         global $DB;
 
         self::require_access($userid);
-        self::require_valid($userid, $data);
-        return self::in_transaction(function () use ($DB, $userid, $data): int {
-            $now = time();
-            $id = (int) $DB->insert_record(self::PLAN, (object) (self::fields($data) + [
-                'userid' => $userid,
-                'status' => 'draft',
-                'sourcetext' => null,
-                'timeapproved' => 0,
-                'timecreated' => $now,
-                'timemodified' => $now,
-            ]));
-            self::write_timetable($id, $data, $now);
-            return $id;
-        });
+        $lock = schoolyear_service::lock((int) ($data->schoolyearid ?? 0));
+        try {
+            self::require_valid($userid, $data, null);
+            return self::in_transaction(function () use ($DB, $userid, $data): int {
+                $now = time();
+                $id = (int) $DB->insert_record(self::PLAN, (object) (self::fields($data) + [
+                    'userid' => $userid,
+                    'status' => 'draft',
+                    'sourcetext' => null,
+                    'timeapproved' => 0,
+                    'timecreated' => $now,
+                    'timemodified' => $now,
+                ]));
+                self::write_timetable($id, $data, $now);
+                return $id;
+            });
+        } finally {
+            $lock->release();
+        }
     }
 
     /**
      * Changes a plan's shell; a timetable given in the data replaces the stored one.
      *
+     * The change holds the lock of the plan's school year, and its timemodified is always later than the one it
+     * replaces. A course link equal to the stored one is kept even if the user can no longer link that course.
+     *
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @param \stdClass $data Plan data (see the class description).
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound, or the first error of validate().
+     * @throws \moodle_exception error_notfound, error_changedelsewhere, the first error of validate(), or locktimeout.
      */
     public static function update(int $userid, int $id, \stdClass $data): void {
         global $DB;
 
         self::require_access($userid);
         self::own($userid, $id);
-        self::require_valid($userid, $data);
-        self::in_transaction(function () use ($DB, $id, $data): void {
-            $now = time();
-            $DB->update_record(self::PLAN, (object) (self::fields($data) + ['id' => $id, 'timemodified' => $now]));
-            self::write_timetable($id, $data, $now);
-        });
+        $lock = schoolyear_service::lock((int) ($data->schoolyearid ?? 0));
+        try {
+            $plan = self::own($userid, $id);
+            if (!empty($data->timemodified) && (int) $data->timemodified !== (int) $plan->timemodified) {
+                throw new \moodle_exception('error_changedelsewhere', 'local_classprogress');
+            }
+            self::require_valid($userid, $data, $plan);
+            $now = max(time(), (int) $plan->timemodified + 1);
+            self::in_transaction(function () use ($DB, $id, $data, $now): void {
+                $DB->update_record(self::PLAN, (object) (self::fields($data) + ['id' => $id, 'timemodified' => $now]));
+                self::write_timetable($id, $data, $now);
+            });
+        } finally {
+            $lock->release();
+        }
     }
 
     /**
@@ -190,6 +209,8 @@ final class plan_service {
     /**
      * Computes the calendars of several plans.
      *
+     * A plan whose school year is missing, which should never happen, gets a calendar without holidays.
+     *
      * @param int $userid The acting user.
      * @param int[] $ids Plan ids; repeated ids count once.
      * @return calendar_result[] Plan id => calendar, in the order of the ids.
@@ -215,10 +236,25 @@ final class plan_service {
         foreach ($ids as $id) {
             $plan = $plans[$id];
             $yearid = (int) $plan->schoolyearid;
-            $holidays[$yearid] ??= schoolyear_service::holidays($userid, $yearid);
+            $holidays[$yearid] ??= self::year_holidays($userid, $yearid);
             $results[$id] = calendar::compute($plan->startdate, $plan->enddate, $timetables[$id], $holidays[$yearid]);
         }
         return $results;
+    }
+
+    /**
+     * Returns the holidays of a plan's school year, which apply to the plan.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @return holiday_entry[] Holidays keyed by holiday id, as schoolyear_service::holidays(); none when the school year
+     *     is missing.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound.
+     */
+    public static function holidays(int $userid, int $id): array {
+        self::require_access($userid);
+        return self::year_holidays($userid, (int) self::own($userid, $id)->schoolyearid);
     }
 
     /**
@@ -248,12 +284,14 @@ final class plan_service {
      *
      * @param int $userid The acting user.
      * @param \stdClass $data Plan data (see the class description).
+     * @param int $id The plan being changed, whose course link is kept even if it could not be made now; 0 for a new one.
      * @return string[] Field => lang string id of the error, in field order; empty when the data is valid.
      * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound, when $id is not one of the user's plans.
      */
-    public static function validate(int $userid, \stdClass $data): array {
+    public static function validate(int $userid, \stdClass $data, int $id = 0): array {
         self::require_access($userid);
-        return self::errors($userid, $data);
+        return self::errors($userid, $data, $id ? self::own($userid, $id) : null);
     }
 
     /**
@@ -261,36 +299,47 @@ final class plan_service {
      *
      * @param int $userid The acting user.
      * @param \stdClass $data Plan data.
+     * @param \stdClass|null $plan The stored plan being changed; null for a new one.
      * @return string[] Field => lang string id of the error.
      */
-    private static function errors(int $userid, \stdClass $data): array {
+    private static function errors(int $userid, \stdClass $data, ?\stdClass $plan): array {
         global $DB;
 
         $errors = [];
         $yearid = (int) ($data->schoolyearid ?? 0);
-        if (!$DB->record_exists('local_classprogress_schoolyear', ['id' => $yearid, 'userid' => $userid])) {
+        $year = $DB->get_record('local_classprogress_schoolyear', ['id' => $yearid, 'userid' => $userid]);
+        if (!$year) {
             $errors['schoolyearid'] = 'error_notfound';
         }
         $courseid = (int) ($data->courseid ?? 0);
-        if ($courseid !== 0 && !self::can_link_course($userid, $courseid)) {
+        $linked = (int) ($plan->courseid ?? 0);
+        if ($courseid !== 0 && $courseid !== $linked && !self::can_link_course($userid, $courseid)) {
             $errors['courseid'] = 'error_course';
         }
-        if (\core_text::strlen(trim((string) ($data->modulecode ?? ''))) > self::MAX_CODE) {
+        $code = trim((string) ($data->modulecode ?? ''));
+        if ($code !== '' && !schoolyear_service::is_name($code, self::MAX_CODE)) {
             $errors['modulecode'] = 'error_modulecode';
         }
-        $title = trim((string) ($data->moduletitle ?? ''));
-        if ($title === '' || \core_text::strlen($title) > self::MAX_TITLE) {
+        if (!schoolyear_service::is_name((string) ($data->moduletitle ?? ''), self::MAX_TITLE)) {
             $errors['moduletitle'] = 'error_moduletitle';
         }
         $start = (string) ($data->startdate ?? '');
         $end = (string) ($data->enddate ?? '');
-        if ($start !== '' && !schoolyear_service::is_date($start)) {
-            $errors['startdate'] = 'error_baddate';
-        }
-        if ($end !== '' && !schoolyear_service::is_date($end)) {
-            $errors['enddate'] = 'error_baddate';
-        } else if ($start !== '' && $end !== '' && !isset($errors['startdate']) && $end < $start) {
-            $errors['enddate'] = 'error_endbeforestart';
+        foreach (['startdate' => $start, 'enddate' => $end] as $field => $date) {
+            if ($date === '') {
+                continue;
+            }
+            $error = schoolyear_service::date_error($date);
+            $afterstart = $field === 'enddate' && $start !== '' && !isset($errors['startdate']);
+            if ($error === null && $afterstart && dates::check_range($start, $end) === dates::REVERSED) {
+                $error = 'error_endbeforestart';
+            }
+            if ($error === null && $year && !dates::within($date, $year->startdate, $year->enddate)) {
+                $error = 'error_dateoutsideyear';
+            }
+            if ($error !== null) {
+                $errors[$field] = $error;
+            }
         }
         foreach ($data->timetable ?? [] as $weekday => $hours) {
             if (!is_int($weekday) || $weekday < 0 || $weekday > 6) {
@@ -307,10 +356,11 @@ final class plan_service {
      *
      * @param int $userid The acting user.
      * @param \stdClass $data Plan data.
+     * @param \stdClass|null $plan The stored plan being changed; null for a new one.
      * @throws \moodle_exception With the lang string id of the first error.
      */
-    private static function require_valid(int $userid, \stdClass $data): void {
-        $errors = self::errors($userid, $data);
+    private static function require_valid(int $userid, \stdClass $data, ?\stdClass $plan): void {
+        $errors = self::errors($userid, $data, $plan);
         if ($errors) {
             throw new \moodle_exception(reset($errors), 'local_classprogress');
         }
@@ -344,6 +394,22 @@ final class plan_service {
             throw new \moodle_exception('error_notfound', 'local_classprogress');
         }
         return $plan;
+    }
+
+    /**
+     * Returns the holidays of a school year of the user; none when the school year is missing.
+     *
+     * @param int $userid The acting user, already checked to qualify.
+     * @param int $yearid School year id.
+     * @return holiday_entry[] Holidays keyed by holiday id.
+     */
+    private static function year_holidays(int $userid, int $yearid): array {
+        global $DB;
+
+        if (!$DB->record_exists('local_classprogress_schoolyear', ['id' => $yearid, 'userid' => $userid])) {
+            return [];
+        }
+        return schoolyear_service::holidays($userid, $yearid);
     }
 
     /**

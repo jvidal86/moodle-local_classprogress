@@ -44,6 +44,7 @@ abstract class base extends \core\event\base {
     /**
      * Sets the event's crud, education level and object table.
      */
+    #[\Override]
     protected function init(): void {
         $this->data['crud'] = static::CRUD;
         $this->data['edulevel'] = self::LEVEL_TEACHING;
@@ -55,6 +56,7 @@ abstract class base extends \core\event\base {
      *
      * @throws \coding_exception When any of that is not so.
      */
+    #[\Override]
     protected function validate_data(): void {
         parent::validate_data();
 
@@ -88,6 +90,7 @@ abstract class base extends \core\event\base {
      *
      * @return array The table of the object, not mapped.
      */
+    #[\Override]
     public static function get_objectid_mapping(): array {
         return ['db' => static::OBJECTTABLE, 'restore' => self::NOT_MAPPED];
     }
@@ -97,6 +100,7 @@ abstract class base extends \core\event\base {
      *
      * @return array Key of other => its table, not mapped.
      */
+    #[\Override]
     public static function get_other_mapping(): array {
         $mapping = [];
         foreach (static::other_ids() as $key => [$table]) {

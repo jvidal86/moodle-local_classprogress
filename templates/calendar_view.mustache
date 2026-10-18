@@ -21,10 +21,12 @@
     school year, and the list of sessions.
 
     Context variables required for this template:
-    * message - Why there is no calendar (missing or reversed dates); when set, nothing else is shown.
+    * message - Why there is no calendar (missing, invalid, reversed or out-of-range dates); when set, nothing else is
+      shown.
     * summary - Number of sessions and hours, as a sentence.
     * months - Each month from the first to the last class day: month, sessions.
-    * hasholidays, holidays - Holidays of the school year: dates, label, lost (sessions it removed).
+    * hasholidays, holidays - Holidays of the school year: dates, label (as typed, escaped here), lost (sessions it
+      removed).
     * hassessions, sessions - Every session: date, weekday, hours.
 
     Example context (json):

@@ -53,6 +53,7 @@ DAY = re.compile(
 SEPARATOR = re.compile(r"(?<!\s)\s+[·—–-]\s+|:\s+")
 CODE_WORD = re.compile(r"^[A-Za-z]{0,4}[0-9][\w.-]*$")
 RANGE_WORD_THEN_DIGIT = re.compile(r"^(?:to|a|–|—|-|\.\.|→)\s*[0-9]", re.I)
+FIRST_DAY, LAST_DAY, MAX_DAYS = dt.date(2000, 1, 1), dt.date(2099, 12, 31), 400  # REQ-CAL-004: dates a teacher may enter
 LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
 
@@ -99,6 +100,8 @@ def parse_holidays(text):
         b = to_date(m.group(2)) if m.group(2) else a
         if not a or not b or b < a:
             continue
+        if not (FIRST_DAY <= a and b <= LAST_DAY) or (b - a).days + 1 > MAX_DAYS:
+            continue  # out_of_range or too_long (REQ-HOL-002, REQ-CAL-004)
         label = m.group(3).strip()
         if not m.group(2) and RANGE_WORD_THEN_DIGIT.match(label):
             continue  # bad_end_date (REQ-HOL-002): a mistyped period end is not a one-day holiday

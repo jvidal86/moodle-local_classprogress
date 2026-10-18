@@ -26,9 +26,12 @@ require_once($CFG->libdir . '/formslib.php');
 /**
  * Form to create or edit a draft plan shell: school year, optional course, module, class days and weekly timetable.
  *
- * Validation is the service's, so the form refuses exactly what the service refuses.
+ * Validation is the service's, so the form refuses exactly what the service refuses. The module code and title are
+ * taken as typed (PARAM_RAW_TRIMMED), so a "<" is kept; they are escaped wherever they are shown. The hidden
+ * timemodified is the version the form was opened on, which the service checks.
  *
- * Custom data: userid (the acting user), years (school year id => name), courses (course id => name).
+ * Custom data: userid (the acting user), years (school year id => name, safe to print), courses (course id => name,
+ * safe to print; see course_options()).
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -48,6 +51,8 @@ class plan_form extends \moodleform {
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
+        $mform->addElement('hidden', 'timemodified');
+        $mform->setType('timemodified', PARAM_INT);
 
         $mform->addElement(
             'select',
@@ -64,7 +69,7 @@ class plan_form extends \moodleform {
         $mform->addHelpButton('courseid', 'course', 'local_classprogress');
 
         $mform->addElement('text', 'modulecode', get_string('modulecode', 'local_classprogress'), ['size' => 12]);
-        $mform->setType('modulecode', PARAM_TEXT);
+        $mform->setType('modulecode', PARAM_RAW_TRIMMED);
         $mform->addRule(
             'modulecode',
             get_string('maximumchars', '', plan_service::MAX_CODE),
@@ -74,7 +79,7 @@ class plan_form extends \moodleform {
         );
 
         $mform->addElement('text', 'moduletitle', get_string('moduletitle', 'local_classprogress'), ['size' => 50]);
-        $mform->setType('moduletitle', PARAM_TEXT);
+        $mform->setType('moduletitle', PARAM_RAW_TRIMMED);
         $mform->addRule('moduletitle', null, 'required', null, 'client');
         $mform->addRule(
             'moduletitle',
@@ -114,7 +119,8 @@ class plan_form extends \moodleform {
     #[\Override]
     public function validation($data, $files): array {
         $errors = parent::validation($data, $files);
-        foreach (plan_service::validate($this->_customdata['userid'], self::to_service_data((object) $data)) as $field => $code) {
+        $plandata = self::to_service_data((object) $data);
+        foreach (plan_service::validate($this->_customdata['userid'], $plandata, (int) ($data['id'] ?? 0)) as $field => $code) {
             if (str_starts_with($field, 'timetable-')) {
                 $field = 'hours' . substr($field, strlen('timetable-'));
             } else if ($field === 'timetable') {
@@ -129,7 +135,7 @@ class plan_form extends \moodleform {
      * Turns submitted form data into plan data for the service.
      *
      * @param \stdClass $formdata Data from get_data() or validation().
-     * @return \stdClass Plan data.
+     * @return \stdClass Plan data, with the version the form was opened on.
      */
     public static function to_service_data(\stdClass $formdata): \stdClass {
         $timetable = [];
@@ -144,7 +150,33 @@ class plan_form extends \moodleform {
             'startdate' => trim($formdata->startdate ?? ''),
             'enddate' => trim($formdata->enddate ?? ''),
             'timetable' => $timetable,
+            'timemodified' => (int) ($formdata->timemodified ?? 0),
         ];
+    }
+
+    /**
+     * The courses a plan may be linked to, for the course menu: those where the user teaches, plus the plan's current
+     * course when the user can no longer link it, so that saving the plan unchanged keeps its link.
+     *
+     * @param int $userid The acting user.
+     * @param \stdClass|null $plan The plan being edited; null for a new one.
+     * @return string[] Course id => name, safe to print.
+     */
+    public static function course_options(int $userid, ?\stdClass $plan): array {
+        global $DB;
+
+        $options = [];
+        $name = fn(\stdClass $course): string =>
+            format_string($course->fullname, true, ['context' => \context_course::instance($course->id)]);
+        foreach (plan_service::linkable_courses($userid) as $course) {
+            $options[$course->id] = $name($course);
+        }
+        $current = (int) ($plan->courseid ?? 0);
+        if ($current !== 0 && !isset($options[$current])) {
+            $course = $DB->get_record('course', ['id' => $current], 'id, fullname');
+            $options[$current] = get_string('courselinkedbefore', 'local_classprogress', $course ? $name($course) : '#' . $current);
+        }
+        return $options;
     }
 
     /**
@@ -157,6 +189,7 @@ class plan_form extends \moodleform {
     public static function from_record(\stdClass $plan, array $timetable): \stdClass {
         $data = (object) [
             'id' => $plan->id,
+            'timemodified' => $plan->timemodified,
             'schoolyearid' => $plan->schoolyearid,
             'courseid' => $plan->courseid ?? 0,
             'modulecode' => $plan->modulecode,

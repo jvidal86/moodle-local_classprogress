@@ -27,7 +27,12 @@ namespace local_classprogress\local;
  *
  * School year data, as taken by validate(), create() and update(): name, startdate, enddate; optionally holidays (the
  * holiday text) and evaluations (a list of objects or arrays with name, startdate and enddate). On update, data without
- * holidays or evaluations leaves them as they are.
+ * holidays or evaluations leaves them as they are (the stored evaluation periods must still fit the new dates), and data
+ * with timemodified, the version the change was made from, is refused when the stored school year is newer. Every date
+ * lies within dates::FIRST_DAY to dates::LAST_DAY, and a school year is at most dates::MAX_DAYS long.
+ *
+ * Changing or deleting a school year, and creating or moving a plan into it, hold the school year's lock (lock()), so
+ * no plan is ever left in a school year that was deleted at the same moment.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -48,6 +53,9 @@ final class schoolyear_service {
 
     /** @var string Holiday error code added to the parser's: the label is longer than MAX_LABEL characters. */
     public const LABEL_TOO_LONG = 'label_too_long';
+
+    /** @var int Seconds a change waits for the lock of its school year. */
+    public const LOCK_TIMEOUT = 5;
 
     /** @var string School year table. */
     private const YEAR = 'local_classprogress_schoolyear';
@@ -90,29 +98,28 @@ final class schoolyear_service {
     /**
      * Changes a school year; holidays and evaluation periods given in the data replace the stored ones.
      *
+     * The change holds the school year's lock, and its timemodified is always later than the one it replaces.
+     *
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @param \stdClass $data School year data (see the class description).
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound, or the first error of validate().
+     * @throws \moodle_exception error_notfound, error_changedelsewhere, the first error of validate(), or locktimeout.
      */
     public static function update(int $userid, int $id, \stdClass $data): void {
-        global $DB;
-
         self::require_access($userid);
         self::own($userid, $id);
-        self::require_valid($data);
-        self::in_transaction(function () use ($DB, $id, $data): void {
-            $now = time();
-            $DB->update_record(self::YEAR, (object) [
-                'id' => $id,
-                'name' => trim($data->name),
-                'startdate' => $data->startdate,
-                'enddate' => $data->enddate,
-                'timemodified' => $now,
-            ]);
-            self::write_children($id, $data, $now);
-        });
+        $lock = self::lock($id);
+        try {
+            $year = self::own($userid, $id);
+            self::require_current($year, $data);
+            $check = clone $data;
+            $check->evaluations ??= array_values(self::evaluations($userid, $id));
+            self::require_valid($check);
+            self::write($id, $data, max(time(), (int) $year->timemodified + 1));
+        } finally {
+            $lock->release();
+        }
     }
 
     /**
@@ -121,21 +128,42 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound, or error_schoolyearhasplans.
+     * @throws \moodle_exception error_notfound, error_schoolyearhasplans, or locktimeout.
      */
     public static function delete(int $userid, int $id): void {
         global $DB;
 
         self::require_access($userid);
         self::own($userid, $id);
-        if (self::plan_count($userid, $id) > 0) {
-            throw new \moodle_exception('error_schoolyearhasplans', 'local_classprogress');
+        $lock = self::lock($id);
+        try {
+            if (self::plan_count($userid, $id) > 0) {
+                throw new \moodle_exception('error_schoolyearhasplans', 'local_classprogress');
+            }
+            self::in_transaction(function () use ($DB, $id): void {
+                $DB->delete_records(self::HOLIDAY, ['schoolyearid' => $id]);
+                $DB->delete_records(self::EVALUATION, ['schoolyearid' => $id]);
+                $DB->delete_records(self::YEAR, ['id' => $id]);
+            });
+        } finally {
+            $lock->release();
         }
-        self::in_transaction(function () use ($DB, $id): void {
-            $DB->delete_records(self::HOLIDAY, ['schoolyearid' => $id]);
-            $DB->delete_records(self::EVALUATION, ['schoolyearid' => $id]);
-            $DB->delete_records(self::YEAR, ['id' => $id]);
-        });
+    }
+
+    /**
+     * Takes the lock of a school year: changing or deleting it, and creating or moving a plan into it, hold it.
+     *
+     * @param int $id School year id.
+     * @return \core\lock\lock The lock; the caller releases it.
+     * @throws \moodle_exception locktimeout, when another request holds it longer than LOCK_TIMEOUT seconds.
+     */
+    public static function lock(int $id): \core\lock\lock {
+        $factory = \core\lock\lock_config::get_lock_factory('local_classprogress');
+        $lock = $factory->get_lock('schoolyear-' . $id, self::LOCK_TIMEOUT);
+        if (!$lock) {
+            throw new \moodle_exception('locktimeout');
+        }
+        return $lock;
     }
 
     /**
@@ -275,19 +303,19 @@ final class schoolyear_service {
      */
     public static function validate(\stdClass $data): array {
         $errors = [];
-        $name = trim((string) ($data->name ?? ''));
-        if ($name === '' || \core_text::strlen($name) > self::MAX_NAME) {
+        if (!self::is_name((string) ($data->name ?? ''), self::MAX_NAME)) {
             $errors['name'] = 'error_name';
         }
         $start = (string) ($data->startdate ?? '');
         $end = (string) ($data->enddate ?? '');
-        if (!self::is_date($start)) {
-            $errors['startdate'] = 'error_baddate';
-        }
-        if (!self::is_date($end)) {
-            $errors['enddate'] = 'error_baddate';
-        } else if (!isset($errors['startdate']) && $end < $start) {
-            $errors['enddate'] = 'error_endbeforestart';
+        $errors += array_filter(['startdate' => self::date_error($start), 'enddate' => self::date_error($end)]);
+        if (!isset($errors['startdate']) && !isset($errors['enddate'])) {
+            $range = dates::check_range($start, $end);
+            if ($range === dates::REVERSED) {
+                $errors['enddate'] = 'error_endbeforestart';
+            } else if ($range === dates::TOO_LONG) {
+                $errors['enddate'] = 'error_yeartoolong';
+            }
         }
         if (isset($data->holidays)) {
             if (strlen($data->holidays) > self::MAX_HOLIDAY_TEXT) {
@@ -304,16 +332,31 @@ final class schoolyear_service {
     }
 
     /**
-     * Tells whether a string is an existing day written exactly yyyy-mm-dd.
+     * Checks one date a teacher entered.
      *
-     * @param string $text The text to check.
-     * @return bool True for an existing day.
+     * @param string $text The date as entered.
+     * @return string|null error_baddate for a text that is not an existing day written yyyy-mm-dd, error_daterange for
+     *     a day outside dates::FIRST_DAY to dates::LAST_DAY, null for a valid date.
      */
-    public static function is_date(string $text): bool {
-        if (preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/D', $text, $m) !== 1) {
-            return false;
+    public static function date_error(string $text): ?string {
+        if (!dates::is_date($text)) {
+            return 'error_baddate';
         }
-        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+        return dates::in_window($text) ? null : 'error_daterange';
+    }
+
+    /**
+     * Tells whether a name, once trimmed, is not empty, fits the length and is one line of valid UTF-8 text.
+     *
+     * Any other character, such as <, > or &, is allowed: names are stored as typed and escaped when displayed.
+     *
+     * @param string $name The name as typed.
+     * @param int $max Most characters.
+     * @return bool True for a valid name.
+     */
+    public static function is_name(string $name, int $max): bool {
+        $name = trim($name);
+        return $name !== '' && \core_text::strlen($name) <= $max && preg_match('/^\P{Cc}*$/u', $name) === 1;
     }
 
     /**
@@ -331,23 +374,23 @@ final class schoolyear_service {
         $ranges = [];
         foreach ($evaluations as $i => $evaluation) {
             $evaluation = (object) $evaluation;
-            $name = trim((string) ($evaluation->name ?? ''));
             $start = (string) ($evaluation->startdate ?? '');
             $end = (string) ($evaluation->enddate ?? '');
-            if ($name === '' || \core_text::strlen($name) > self::MAX_NAME) {
+            $dateerror = self::date_error($start) ?? self::date_error($end);
+            if (!self::is_name((string) ($evaluation->name ?? ''), self::MAX_NAME)) {
                 $errors["evaluations-{$i}"] = 'error_name';
-            } else if (!self::is_date($start) || !self::is_date($end)) {
-                $errors["evaluations-{$i}"] = 'error_baddate';
-            } else if ($end < $start) {
+            } else if ($dateerror !== null) {
+                $errors["evaluations-{$i}"] = $dateerror;
+            } else if (dates::check_range($start, $end) === dates::REVERSED) {
                 $errors["evaluations-{$i}"] = 'error_endbeforestart';
-            } else if ($year !== null && ($start < $year[0] || $end > $year[1])) {
+            } else if ($year !== null && (!dates::within($start, ...$year) || !dates::within($end, ...$year))) {
                 $errors["evaluations-{$i}"] = 'error_evaluationoutsideyear';
             } else {
-                $ranges[$i] = [$start, $end];
+                $ranges[$i] = [dates::day_number($start), dates::day_number($end)];
             }
         }
         uasort($ranges, fn(array $a, array $b): int => $a[0] <=> $b[0]);
-        $lastend = '';
+        $lastend = PHP_INT_MIN;
         foreach ($ranges as $i => [$start, $end]) {
             if ($start <= $lastend) {
                 $errors["evaluations-{$i}"] = 'error_evaluationsoverlap';
@@ -356,6 +399,19 @@ final class schoolyear_service {
         }
         ksort($errors, SORT_NATURAL);
         return $errors;
+    }
+
+    /**
+     * Refuses a change made from an older version of the school year than the stored one.
+     *
+     * @param \stdClass $year The stored school year.
+     * @param \stdClass $data School year data; its timemodified, when set, is the version the change was made from.
+     * @throws \moodle_exception error_changedelsewhere.
+     */
+    private static function require_current(\stdClass $year, \stdClass $data): void {
+        if (!empty($data->timemodified) && (int) $data->timemodified !== (int) $year->timemodified) {
+            throw new \moodle_exception('error_changedelsewhere', 'local_classprogress');
+        }
     }
 
     /**
@@ -412,6 +468,28 @@ final class schoolyear_service {
             throw new \moodle_exception('error_notfound', 'local_classprogress');
         }
         return $year;
+    }
+
+    /**
+     * Writes valid data over a school year, in one transaction.
+     *
+     * @param int $id School year id.
+     * @param \stdClass $data Valid school year data.
+     * @param int $now Time of the change, later than the stored timemodified.
+     */
+    private static function write(int $id, \stdClass $data, int $now): void {
+        global $DB;
+
+        self::in_transaction(function () use ($DB, $id, $data, $now): void {
+            $DB->update_record(self::YEAR, (object) [
+                'id' => $id,
+                'name' => trim($data->name),
+                'startdate' => $data->startdate,
+                'enddate' => $data->enddate,
+                'timemodified' => $now,
+            ]);
+            self::write_children($id, $data, $now);
+        });
     }
 
     /**

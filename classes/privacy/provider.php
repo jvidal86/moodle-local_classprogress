@@ -50,6 +50,7 @@ final class provider implements
      * @param collection $collection The collection to add to.
      * @return collection The same collection.
      */
+    #[\Override]
     public static function get_metadata(collection $collection): collection {
         $tables = [
             'schoolyear' => ['userid', 'name', 'startdate', 'enddate', 'timecreated', 'timemodified'],
@@ -81,6 +82,7 @@ final class provider implements
      * @param int $userid The user.
      * @return contextlist The user's context, or an empty list.
      */
+    #[\Override]
     public static function get_contexts_for_userid(int $userid): contextlist {
         $sql = "SELECT ctx.id
                   FROM {context} ctx
@@ -100,6 +102,7 @@ final class provider implements
      *
      * @param userlist $userlist The list to fill, for one context.
      */
+    #[\Override]
     public static function get_users_in_context(userlist $userlist): void {
         $context = $userlist->get_context();
         if (!$context instanceof \context_user) {
@@ -117,6 +120,7 @@ final class provider implements
      *
      * @param approved_contextlist $contextlist The approved contexts of one user.
      */
+    #[\Override]
     public static function export_user_data(approved_contextlist $contextlist): void {
         $userid = (int) $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
@@ -131,6 +135,7 @@ final class provider implements
      *
      * @param \context $context The context to clear.
      */
+    #[\Override]
     public static function delete_data_for_all_users_in_context(\context $context): void {
         if ($context instanceof \context_user) {
             data_eraser::delete_user_data((int) $context->instanceid);
@@ -142,6 +147,7 @@ final class provider implements
      *
      * @param approved_contextlist $contextlist The approved contexts of one user.
      */
+    #[\Override]
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
         $userid = (int) $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
@@ -157,6 +163,7 @@ final class provider implements
      *
      * @param approved_userlist $userlist The approved users of one context.
      */
+    #[\Override]
     public static function delete_data_for_users(approved_userlist $userlist): void {
         $context = $userlist->get_context();
         if (!$context instanceof \context_user) {
