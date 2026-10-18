@@ -36,8 +36,8 @@ Out of scope for v1: XLSX plan import (possible later, feeding the same parsed s
 | Rule details | 100 rules with sources from `mod_attendance`, `mod_h5pactivity` and `local_ai_manager`. | `docs/moodle-rules/`, summary in `docs/MOODLE_STANDARDS.md` |
 
 Not yet verified (check when first needed):
-- `moodle-docker` actually running a 5.3 checkout and mounting the plugin at `public/local/classprogress` (M0).
-- Whether PHPUnit 11.5 on 5.3 accepts docblock annotations under `failOnDeprecation` (first CI run, M0).
+- ~~`moodle-docker` running a 5.3 checkout with the plugin at `public/local/classprogress`~~ **resolved in M0**: works; `admin/cli/install_database.php` stays at the root, init scripts are under `public/admin/tool/` (`docs/DEV_ENVIRONMENT.md`).
+- ~~Whether PHPUnit 11.5 on 5.3 accepts docblock annotations~~ **resolved in M0**: they pass under `--fail-on-warning`; PHPUnit 11.5 only reports a runner deprecation notice, which does not fail the run. Adding the matching attribute next to the annotation removes the notice and still works on 9.6.
 - Whether teachers see the link and can open the pages with the course-level capability check, including a teacher with a suspended enrolment (M1).
 - That the capability appears in the role editor with `CONTEXT_COURSE` (M1).
 - That a unique index on the nullable `planitemid` behaves the same on MariaDB and PostgreSQL (M1).

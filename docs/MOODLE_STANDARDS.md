@@ -103,8 +103,8 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 ## 7. Open points the plugins did not settle
 
 Each is a named check in `PLAN.md` sections 2 and 6:
-1. Does PHPUnit 11.5 on 5.3 accept docblock annotations under `failOnDeprecation`? (first CI run, M0)
-2. Does `moodle-docker` mount the plugin correctly at `public/local/classprogress` on 5.3? (M0; the image's document-root logic is read from source, not run)
+1. ~~Does PHPUnit 11.5 on 5.3 accept docblock annotations?~~ Resolved in M0: yes; one runner-deprecation notice per annotated item, which does not fail `--fail-on-warning`.
+2. ~~Does `moodle-docker` mount the plugin at `public/local/classprogress` on 5.3?~~ Resolved in M0: yes.
 3. Does the capability appear in the role editor with `CONTEXT_COURSE`, and does a teacher with a suspended enrolment still qualify? (M1)
 4. Is a unique index on a nullable `planitemid` equivalent on MariaDB and PostgreSQL? (M1)
 5. Which page layout (`standard` or `report`) works best on both versions? (M1)
