@@ -19,9 +19,9 @@ The files below are in this repository: `test-data/holidays-centre-2026-27.txt` 
 ## 3. Import, preview, save
 1. On the plan page, **Import plan text**. Upload `test-data/plans/0372.md`, or paste its text.
 2. **Preview:** it should read `MP 0372 · Gestió de bases de dades`, 7 blocks, 60 days, **No errors or warnings**, and tell you the module heading replaces what you typed.
-3. **Save draft.** The plan page now lists the days grouped by RA, with dates and hours.
+3. **Save draft.** The plan page now lists the days grouped by RA, with dates, hours and each day's text. Check the last day's text before approving: the preview does not show day texts, so this is where a stray remark would appear.
 4. Try **Change the text** with mistakes and preview again (do not save): a date that does not exist (`### 2026-02-30 [2h]`), a day on a holiday (`### 2026-10-12 [2h]`), a Wednesday (`### 2026-10-14 [2h]`), a second `#` heading. Errors block saving; warnings only need reading.
-5. The import page also shows **Instructions for my AI assistant**: copy them with one of your own plans into a chat and import what comes back.
+5. The import page also shows **Instructions for my AI assistant**: copy them with one of your own plans into a chat and paste back exactly what the assistant returns, even if it wraps the plan in a ``` code block with a sentence around it: the preview should say the wrapper was removed (REQ-PLN-017).
 
 ## 4. Approve and lock
 1. **Approve plan.** If the text had warnings you must tick that you read them; approval asks for confirmation and is final.
