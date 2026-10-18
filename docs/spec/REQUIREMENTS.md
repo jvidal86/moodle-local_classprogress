@@ -239,6 +239,10 @@ A teacher can add an entry that belongs to no plan item, for a date inside the p
 Phase: M3 · Status: agreed
 Entries can be created only for approved plans; a draft plan shows no log.
 
+### REQ-LOG-009 Sessions after today
+Phase: M3 · Status: agreed
+Added 2026-10-18 (decided by the teacher). An entry for a plan item dated after today may only have the status `not_done`, with its reason: a cancellation known in advance, such as an announced strike or trip. `done` and `partial` are refused until that day has come. An unplanned session (`added`) cannot be dated after today. "Today" is the teacher's own date in their time zone, as in REQ-LOG-001.
+
 ## HIS · History (M3) · agreed 2026-10-18
 
 ### REQ-HIS-001 Every change is recorded
