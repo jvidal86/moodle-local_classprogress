@@ -146,8 +146,8 @@ Rules:
 Preview before approving:
 - **Errors (block approval):** a day heading whose date cannot be read; more than one `#` module in the text (v1 imports one module at a time).
 - **Warnings (must be read and confirmed):** dates out of order, a day on a holiday or on a weekday with no class, a weekday prefix that does not match the date, a date outside the school year, an empty day, a day with no RA or block above it, missing module heading, missing hours (the weekday's timetable hours are used instead, if set).
-- The exact rules and error/warning codes are implemented in `tools/check_plan.py`; the PHP importer must give the same results on `test-data/` (section 10).
-- A "Copy instructions for my AI assistant" button gives the format above, ready to paste into a chat together with the teacher's own plan.
+- The grammar's rules and error/warning codes are implemented in `tools/check_plan.py`; the PHP parser must give the same results on `test-data/` (section 10). The import limits of REQ-IMP-001 (`no_days`, `too_many_days`, `out_of_range`, the 255-character and 24-hour limits) are checked by the import service on top of the parser and proved by PHPUnit, not by the reference (clarified in R2).
+- The import page shows "Instructions for my AI assistant": the format above as text the teacher copies by hand into a chat together with their own plan (v1 has no custom JavaScript, so there is no copy button). A plan the assistant returns wrapped in a code block is unwrapped (REQ-PLN-017).
 
 An XLSX importer can be added later; it would only need to produce the same list of days.
 

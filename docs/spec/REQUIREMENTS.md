@@ -86,6 +86,10 @@ Phase: M2 · Status: agreed
 Added 2026-10-18. Reading a plan takes time proportional to its length: lines with thousands of spaces or `#` characters are read in well under a second by both the reference parser and the plugin, so a pasted plan at the size limit cannot tie up the server.
 Examples: `test-data/cases/long-lines.md`.
 
+### REQ-PLN-017 Plan wrapped by an AI assistant
+Phase: M2 · Status: agreed
+Added 2026-10-18 (R2, decided by the teacher). AI assistants often return the plan inside one Markdown code block, sometimes with a sentence before or after it. When the text has no heading of level 1 to 3 outside code fences, and exactly one fenced block contains such headings, the content of that block is read as the plan (line numbers still refer to the pasted text) and the warning `unwrapped_fence` says the wrapper was removed. Any other text is read as before.
+
 ---
 
 ## HOL · Holidays (M1)
@@ -289,7 +293,7 @@ Approval records the time and fires the `plan_approved` event. There is no way t
 
 ### REQ-LCK-003 Safe display
 Phase: M2 · Status: agreed
-Plan text is displayed through Moodle's Markdown formatting with cleaning on: script, event handlers and raw HTML from the plan do nothing.
+Plan text is displayed through Moodle's Markdown formatting with cleaning on: script, event handlers, `javascript:` links and other unsafe HTML from the plan are removed and never run; harmless formatting that survives the cleaning may still show (wording corrected in R2).
 
 ### REQ-LCK-004 Dates do not move
 Phase: M2 · Status: agreed
