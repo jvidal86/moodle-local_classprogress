@@ -26,8 +26,11 @@ namespace local_classprogress\local;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class holiday_parser {
-    /** @var string One date, as written. */
-    private const DATE = '([0-9]{4}-[0-9]{2}-[0-9]{2})';
+    /** @var string One date as written: yyyy-mm-dd or dd/mm/yyyy (day and month may have one digit). */
+    private const DATE = '([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4})';
+
+    /** @var string Words and signs accepted between the two dates of a period. */
+    private const SEPARATOR = '(?:to|a|–|—|-|\.\.|→)';
 
     /**
      * Parses holiday text.
@@ -37,14 +40,41 @@ final class holiday_parser {
      */
     public static function parse(string $text): holiday_parse_result {
         $entries = [];
-        $pattern = '/^' . self::DATE . '\s*(.*)$/u';
-        $lines = explode("\n", $text);
-        foreach ($lines as $index => $line) {
+        $pattern = '~^' . self::DATE . '\s*(?:' . self::SEPARATOR . '\s*' . self::DATE . ')?\s*(.*)$~iu';
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $text));
+        foreach ($lines as $index => $raw) {
+            $line = self::trim($raw);
             if (preg_match($pattern, $line, $m) !== 1) {
                 continue;
             }
-            $entries[] = new holiday_entry($index + 1, $m[1], $m[1], trim($m[2]));
+            $start = self::to_iso($m[1]);
+            $end = $m[2] === '' ? $start : self::to_iso($m[2]);
+            $entries[] = new holiday_entry($index + 1, $start, $end, self::trim($m[3]));
         }
         return new holiday_parse_result($entries, []);
+    }
+
+    /**
+     * Writes a date as ISO yyyy-mm-dd.
+     *
+     * @param string $date A date matched by {@see self::DATE}.
+     * @return string The same date as yyyy-mm-dd, zero-padded.
+     */
+    private static function to_iso(string $date): string {
+        if (strpos($date, '/') === false) {
+            return $date;
+        }
+        [$day, $month, $year] = explode('/', $date);
+        return sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
+    }
+
+    /**
+     * Trims Unicode white space (such as a no-break space pasted from a web page) from both ends.
+     *
+     * @param string $text Text to trim.
+     * @return string The trimmed text; text that is not valid UTF-8 is returned unchanged.
+     */
+    private static function trim(string $text): string {
+        return preg_replace('/^\s+|\s+$/u', '', $text) ?? $text;
     }
 }
