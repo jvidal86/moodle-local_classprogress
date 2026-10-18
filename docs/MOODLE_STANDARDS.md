@@ -91,6 +91,7 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 - [ ] `final class x_test extends \advanced_testcase` (or `\basic_testcase` when no database is touched), `@covers`, `: void`, `resetAfterTest()` inside each test, `public static` data providers, no attributes.
 - [ ] Plugin generator in `tests/generator/lib.php`; Behat generator and `behat_local_classprogress.php`.
 - [ ] First tests to write: calendar and holiday parser; plan parser against `test-data/` (one provider per expected-results JSON); services (import, approve, entry save and delete, history, late flag, stale save); access and ownership; exporter; events with `redirectEvents()`; privacy provider; one Behat flow tagged `@local @local_classprogress` (teacher sees the link, imports, approves, logs, exports; student has no link).
+- [ ] Behat runs on **both** 4.5 and 5.3 before a merge (the agents' stacks are 4.5 only). Do not anchor assertions on items of Moodle's own navigation: they differ between versions (J1 failed on 5.3 in CI for that reason, 2026-10-18).
 - [ ] The hook callback is tested through the predicate it calls (`access::qualifies()`), because no plugin tests the callback directly.
 - [ ] Fixtures: copy `test-data/` into `tests/fixtures/` with a sync script; check the copy equals the source before release.
 

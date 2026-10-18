@@ -31,10 +31,12 @@ Feature: The Class progress link in the primary navigation
   Scenario: A student does not see the link
     When I am on the "My courses" page logged in as "student1"
     Then "Class progress" "link" should not exist in the ".primary-navigation" "css_element"
-    And I should see "My courses" in the ".primary-navigation" "css_element"
+    # Proves the top bar was rendered, so the absence above is not a false pass. Checking for a named item
+    # there is version-dependent: "My courses" (student) and "Home" (guest) were not found in it on 5.3 in CI.
+    And ".primary-navigation" "css_element" should exist
 
   Scenario: A guest does not see the link
     When I log in as "guest"
     And I am on site homepage
     Then "Class progress" "link" should not exist in the ".primary-navigation" "css_element"
-    And I should see "Home" in the ".primary-navigation" "css_element"
+    And ".primary-navigation" "css_element" should exist
