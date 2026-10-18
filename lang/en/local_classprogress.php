@@ -24,6 +24,21 @@
 
 $string['cachedef_showlink'] = 'Whether the Class progress link is shown to the current user';
 $string['classprogress:use'] = 'Use Class progress';
+$string['error_baddate'] = 'Enter an existing date written yyyy-mm-dd, such as 2026-09-14.';
+$string['error_course'] = 'Choose a course where you teach.';
+$string['error_endbeforestart'] = 'The last day is before the first day.';
+$string['error_evaluationoutsideyear'] = 'The evaluation period must lie within the school year.';
+$string['error_evaluationsoverlap'] = 'Evaluation periods cannot share a day.';
+$string['error_holidaylines'] = 'Some holiday lines cannot be read. Correct or remove them; nothing has been saved.';
+$string['error_holidaytexttoolong'] = 'The holiday text is too long: keep it under 32 KB.';
+$string['error_hours'] = 'Enter a number of hours from 0 to 24.';
+$string['error_modulecode'] = 'The module code can have up to 100 characters.';
+$string['error_moduletitle'] = 'Enter the module title, up to 255 characters.';
+$string['error_name'] = 'Enter a name of up to 255 characters.';
+$string['error_notfound'] = 'That item does not exist, or you do not have permission to see it.';
+$string['error_schoolyearhasplans'] = 'This school year has plans. Delete its plans first.';
+$string['error_toomanyevaluations'] = 'A school year can have up to 20 evaluation periods.';
+$string['error_weekday'] = 'The timetable has a day that is not a weekday.';
 $string['evententrycreated'] = 'Entry created';
 $string['evententrydeleted'] = 'Entry deleted';
 $string['evententryupdated'] = 'Entry updated';
