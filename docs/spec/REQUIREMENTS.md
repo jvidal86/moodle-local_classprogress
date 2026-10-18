@@ -78,7 +78,7 @@ Examples: `test-data/expected.json`.
 
 ### REQ-PLN-015 Text encoding and characters
 Phase: M2 · Status: agreed
-Added 2026-10-18. The plan must be valid UTF-8; otherwise it is refused as a whole with the error `not_utf8`. A leading byte-order mark is ignored. Lines end with LF, CRLF or CR. Dates and hours are written with the digits 0 to 9 only. A word before the date is accepted only if it is one of the weekday forms in REQ-PLN-004, in any letter case (`DL`, `Mié`, `SÁB`); any other word, including look-alike letters such as `ſat` or `FRİ`, makes the heading the error `bad_date`. Unusual input never stops the parser with a crash.
+Added 2026-10-18. The plan must be valid UTF-8; otherwise it is refused as a whole with the error `not_utf8`. A leading byte-order mark is ignored. Lines end with LF, CRLF or CR. Dates and hours are written with the digits 0 to 9 only. A word before the date is accepted only if it is one of the weekday forms in REQ-PLN-004, in any letter case (`DL`, `Mié`, `SÁB`); any other word, including look-alike letters such as `ſat` or `FRİ`, makes the heading the error `bad_date`. Unusual input never stops the parser with a crash. Whether the control characters U+001C to U+001F and U+180E count as white space is left unspecified (the two parsers differ; they do not occur in real plans; R1-15).
 Examples: `test-data/cases/bom-and-line-endings.md`, `test-data/cases/odd-weekdays.md`, `test-data/cases/unicode-digits.md`.
 
 ### REQ-PLN-016 Speed on hostile input
@@ -97,7 +97,7 @@ Examples: `test-data/holidays-centre-2026-27.txt`.
 
 ### REQ-HOL-002 Bad holiday lines
 Phase: M1 · Status: agreed
-A line that is not a date, has a non-existent date, or ends before it starts is reported with its line number and the reason, is never a holiday, and does not stop the other lines. A period whose end is mistyped is also reported, not read as a one-day holiday (changed 2026-10-18): when the first date is followed by a range word or dash (`to`, `a`, `–`, `—`, `-`, `..`, `→`) and then a digit, the text after it must be a valid date, otherwise the line is the error `bad_end_date`. Example: `2026-12-22 to 2027-1-07 Nadal`. A dash followed by text, as in `2026-10-12 - Festa`, is still a one-day holiday with that label.
+A line that is not a date, has a non-existent date, or ends before it starts is reported with its line number and the reason, is never a holiday, and does not stop the other lines. A period whose end is mistyped is also reported, not read as a one-day holiday (changed 2026-10-18): when the first date is followed by a range word or dash (`to`, `a`, `–`, `—`, `-`, `..`, `→`) and then a digit, the text after it must be a valid date, otherwise the line is the error `bad_end_date`. Example: `2026-12-22 to 2027-1-07 Nadal`. A dash followed by text, as in `2026-10-12 - Festa`, is still a one-day holiday with that label. Changed 2026-10-18 (R1): a holiday text with any bad line is refused as a whole and nothing is saved; every bad line is listed with its number and reason, and the teacher's text stays in the form. A date outside 2000-01-01 to 2099-12-31 is the error `out_of_range`, and a period longer than 400 days is the error `too_long`.
 
 ### REQ-HOL-003 Shared by the school year
 Phase: M1 · Status: agreed
@@ -117,11 +117,15 @@ The calendar gives the number of sessions, total hours and sessions per month. M
 Phase: M1 · Status: agreed
 Each holiday reports how many class sessions it removed.
 
+### REQ-CAL-004 Date limits
+Phase: M1 · Status: agreed
+Added 2026-10-18 (R1). Every date a teacher enters (school year, holidays, evaluation periods, plan) lies between 2000-01-01 and 2099-12-31; a school year and a holiday period are at most 400 days long; plan dates, when given, lie inside their school year. Anything else is refused with a message. As a safety net the calendar itself returns an empty result with a code for a date outside that window or a range longer than 400 days, and dates are compared as dates, never as text, so a typo such as 9999 or 9027 can never make a page loop or run out of memory.
+
 ## ACC · Access (M1)
 
 ### REQ-ACC-001 Who sees the link
 Phase: M1 · Status: agreed
-The "Class progress" link in the top bar appears only for users who hold the capability in at least one course. It does not appear for students, guests or users without the capability.
+The "Class progress" link in the top bar appears only for users who hold the capability in at least one course. It does not appear for students, guests or users without the capability. Decided in M1: site administrators qualify; a teacher whose enrolment is suspended still qualifies (the role assignment stays and the data is their own); guests and the not-logged-in user never qualify; a role granted during a session shows the link from the next login, while the access check itself is immediate.
 
 ### REQ-ACC-002 Every page is protected
 Phase: M1 · Status: agreed
@@ -139,7 +143,7 @@ The capability is `write` type with the personal-data risk flag, and is allowed 
 
 ### REQ-OWN-001 Private to the owner
 Phase: M1 · Status: agreed
-A teacher cannot read, edit, delete or export another teacher's school years, plans, entries or history, even with the same capability, and even as an administrator.
+A teacher cannot read, edit, delete or export another teacher's school years, plans, entries or history, even with the same capability, and even as an administrator. In M1 this is proved for school years and plans; entries and history are proved again in M3 and export in M4, each with the same two kinds of intruder.
 
 ### REQ-OWN-002 No existence leak
 Phase: M1 · Status: agreed
@@ -158,6 +162,22 @@ Installing creates every table of the data model; the upgrade function exists an
 ### REQ-DAT-002 One entry per plan item
 Phase: M1 · Status: agreed
 A plan item has at most one entry, while entries without a plan item (unplanned sessions) are not limited. The same on PostgreSQL and MariaDB.
+
+### REQ-DAT-003 Changed elsewhere
+Phase: M1 · Status: agreed
+Added 2026-10-18 (R1). Saving a school year or a plan that was changed (in another tab or session) after its form was opened is refused with "This was changed elsewhere; reload to see the latest version", and nothing is saved.
+
+### REQ-DAT-004 Text kept as typed
+Phase: M1 · Status: agreed
+Added 2026-10-18 (R1). Names, labels and pasted holiday text are stored exactly as typed, including characters such as `<`, `>` and `&` (for example `Pont <- Immaculada` and `Programació <C++> i Java`), are validated by the plugin's own rules, and are always escaped when displayed, so nothing a teacher types runs as HTML.
+
+### REQ-DAT-005 Upgrade creates missing tables
+Phase: M1 · Status: agreed
+Added 2026-10-18 (R1). Upgrading from any earlier version of the plugin, including the M0 skeleton (2026101800) that had no tables, leaves every table of the data model in place.
+
+### REQ-DAT-006 No plan without its school year
+Phase: M1 · Status: agreed
+Added 2026-10-18 (R1). Deleting a school year and creating a plan in it at the same moment never leaves a plan without its school year; if it ever happened, the landing page would still load and show such a plan apart.
 
 ## PRV · Privacy (M1)
 

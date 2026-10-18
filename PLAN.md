@@ -1,6 +1,6 @@
 # Class progress tracking: Moodle plugin plan
 
-Status: planning (reviewed 2026-10-18), no plugin code yet. Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
+Status (2026-10-18): M0 done (R0 closed); M1 built and frozen as `phase-M1-done`, review round R1 in progress (`docs/reviews/R1-M1.md`). Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
 
 ## 1. What we are building
 
@@ -76,7 +76,7 @@ local/classprogress/
 | `plan` | owner, schoolyear, module code and module title (from the `#` heading), optional courseid, start/end, status (`draft`/`approved`), source Markdown text, time approved. One plan per module. |
 | `slot` | plan, weekday, hours (weekly timetable; optional, gives default hours and day checks) |
 | `planitem` | plan, sort order, **session date**, block (the RA or block heading above the day), title, content (Markdown), planned hours |
-| `entry` | planitem (null for unplanned), plan, session date, status, text + format, reason, reason note, **measure** (corrective action, as in the current "Desviació · motiu · mesura" column), carry flag, written-on date, times created/modified. One entry per planitem (unique **index**, not key; `planitemid` is null for unplanned entries, so uniqueness is tested on MariaDB and PostgreSQL). |
+| `entry` | planitem (null for unplanned), plan, session date, status, text + format, reason, reason note, **measure** (corrective action, as in the current "Desviació · motiu · mesura" column), carry flag, written-on date, times created/modified. One entry per planitem (a `foreign-unique` key: XMLDB refuses a separate unique index on a key column; `planitemid` is null for unplanned entries; uniqueness proved on MariaDB and PostgreSQL). |
 | `entry_hist` | entry id, plan, user, action (`create`/`update`/`delete`), JSON snapshot of every field, time. Survives deleting the entry. |
 | `import` | plan, source (pasted/uploaded name), content hash, day count, time. The plan's Markdown source is stored on the plan itself, so no file storage is needed. |
 
@@ -92,7 +92,7 @@ local/classprogress/
 **Standards and security baseline (applies from M1, not at the end)**
 - Every page: `require_login()`, then `local_classprogress\local\access::require_user()`, then params via `required_param`/`optional_param` with PARAM types. No superglobals.
 - Writes use moodleforms (sesskey built in); any link-based action uses `confirm_sesskey()` and a confirmation step for destructive actions.
-- **Ownership:** a capability never proves ownership, and site admins pass every capability check. Every service method takes the acting user from `$USER`, puts the owner in the WHERE (or joins up to the plan's owner) and compares counts for id lists. PHPUnit proves that user B (with the same capability, and an admin) cannot read, edit, delete or export user A's plans and entries, and that a missing id and a foreign id give the same exception.
+- **Ownership:** a capability never proves ownership, and site admins pass every capability check. Every service method takes the acting user's id as a parameter (pages pass `$USER->id`), puts the owner in the WHERE (or joins up to the plan's owner) and compares counts for id lists. PHPUnit proves that user B (with the same capability, and an admin) cannot read, edit, delete or export user A's plans and entries, and that a missing id and a foreign id give the same exception.
 - SQL: XMLDB definitions and `$DB` methods with placeholders only.
 - Output: `s()` for plain text, `format_string()` for module and RA titles, `format_text($text, FORMAT_MARKDOWN, ['context' => ...])` for plan and entry text (Markdown output is always cleaned; never `noclean`). In templates `{{ }}`, and `{{{ }}}` only for URLs or text already through `format_text()`. Consider `'filter' => false` on the plan view. ISO dates have no PARAM type: read them as `PARAM_TEXT` and validate with a strict pattern and `DateTimeImmutable` in the service.
 - Plan text: size limit (default 200 KB) and day limit (default 400) as admin settings. Our own parser reads it as data only. Markdown is stored as text and displayed through `format_text()` with `FORMAT_MARKDOWN` and cleaning on, so no HTML or script from the plan is trusted. An uploaded `.md` file is read into the same text box and not stored.
@@ -163,7 +163,7 @@ The work is split into phases **M0 to M5** (the former milestones; the ids stay,
 
 Every phase follows the same cycle (details in `docs/TESTING_STRATEGY.md` and `docs/spec/README.md`):
 
-1. **Specify** the phase's requirements in `docs/spec/REQUIREMENTS.md`, with examples and draft Behat scenarios. You accept them (status `agreed`) before code is written. The 42 requirements of M1 and M2 are drafted; later phases are specified when they start, so they benefit from what the earlier ones taught.
+1. **Specify** the phase's requirements in `docs/spec/REQUIREMENTS.md`, with examples and draft Behat scenarios. You accept them (status `agreed`) before code is written. The requirements of M1 and M2 are agreed (see `docs/spec/REQUIREMENTS.md` for the current list); later phases are specified when they start, so they benefit from what the earlier ones taught.
 2. **Test first:** failing PHPUnit tests (Behat for page flows), each tagged with the requirement ids it proves.
 3. **Implement** with the red-green-refactor loop. Pure logic (calendar, parsers, arithmetic) lives in classes that need no database, tested with `basic_testcase` so the loop stays fast.
 4. **Trace:** `python3 tools/check_traceability.py --strict M<n>` passes (every requirement up to the phase has a test; no test cites an unknown id).
@@ -177,7 +177,7 @@ End-to-end tests are Behat, Moodle's own e2e layer: about eight teacher-journey 
 
 1. **Freeze.** Commit and tag the phase (`phase-M2-done`); nothing new is built during the round, only fixes.
 2. **Self-checks (automatic).** The whole test suite and the CI matrix (PHP 8.1 on 4.5, PHP 8.3 on 5.3, PostgreSQL and MariaDB); `python3 tools/check_plan.py --selftest`; `python3 tools/check_traceability.py --strict M<n>`; developer debugging on (`$CFG->debug = DEBUG_DEVELOPER`) while clicking through every screen.
-3. **Independent review** (in R1, R2 and R5; decision 11). Fresh agents get the repository and the checklists, **not the author's conclusions**, one per lens below, plus the phase-specific checks in 6.3. For code, the `code-review` and `security-review` skills are used. Findings go back as evidence (file, line, how to reproduce), not as opinions.
+3. **Independent review** (in R1, R2 and R5; decision 11). Since R1 (which proved far too expensive for this codebase), **one** fresh reviewer per round combines the three lenses below, focused on what changed since the previous round, with an explicit budget (about an hour; fuzzing in the hundreds of cases, not thousands; nothing CI already checks). A second agent only for a genuinely high-risk area. The reviewer gets the repository and the checklists, **not the author's conclusions**, plus the phase-specific checks in 6.3. For code, the `code-review` and `security-review` skills are used. Findings go back as evidence (file, line, how to reproduce), not as opinions.
 4. **Triage.** Every finding is written to `docs/reviews/R<n>-<phase>.md` (template: `docs/reviews/TEMPLATE.md`) with a severity:
    - **P1:** data loss, a leak between users, a security hole, or a wrong figure shown to the inspector.
    - **P2:** a functional bug, a failed standard (phpcs, `validate`, a rule in `docs/MOODLE_STANDARDS.md`), or a flaky test.
@@ -241,7 +241,7 @@ Decided:
 8. The work is split into phases with a review round after each (coherence, errors, bug hunting), and a phase does not start until the previous round is closed (section 6). One exception, to work in parallel: pure-logic code of a later phase (parsers, calendar) may be written test-first on its own branch while an earlier phase is being finished; it is merged only after the earlier review round closes, and only for requirements already agreed.
 9. Spec-driven and test-driven: each phase starts with agreed requirements (`docs/spec/REQUIREMENTS.md`), code is written test first, every requirement is proved by a test that cites its id, and Behat covers about eight end-to-end teacher journeys (`docs/TESTING_STRATEGY.md`).
 10. PHPUnit tests carry their metadata as docblock annotations only (`@covers`, `@group REQ-…`, `@dataProvider`), no attributes. Verified in CI: they pass on 4.5 (PHPUnit 9.6) and 5.3 (PHPUnit 11.5, one deprecation notice per item, not a failure). Revisit only when a supported Moodle version ships PHPUnit 12.
-11. Independent review agents run in rounds R1, R2 and R5. R0, R3 and R4 use the automatic checks plus the phase-specific checks in section 6.3.
+11. Independent review agents run in rounds R1, R2 and R5, one budgeted reviewer per round from R2 on (see 6.1 step 3). R0, R3 and R4 use the automatic checks plus the phase-specific checks in section 6.3.
 
 The sample of real plan text that was needed is covered: `test-data/` holds three real plans from your CFGS material (section 10). What remains for M2 is your sign-off after trying the importer on your own plans (R2).
 
@@ -275,10 +275,10 @@ Real material from `~/CFGS` was turned into a test dataset for the importer:
 |---|---|
 | `test-data/plans/0372.md`, `0374.md`, `0377.md` | Three real module plans (60, 61 and 27 class days) in the importer format, generated from your dated guides. 0372 is Mon+Fri 2 h, 0374 Mon+Thu 2 h, 0377 Tue 1 h. |
 | `test-data/holidays-centre-2026-27.txt` | The Jaume Huguet school calendar as holiday lines: 14 single dates and 2 periods (Nadal, Setmana Santa). Centre notices are kept as comments. |
-| `test-data/cases/*.md` + `expected.json` | 11 small hand-made files for every error and warning, and for the odd formats (weekday prefixes, `[1,5 h]`, headings inside code fences, two days on one date). |
+| `test-data/cases/*.md` + `expected.json` | Small hand-made files for every error and warning, and for the odd formats (weekday prefixes, `[1,5 h]`, headings inside code fences, two days on one date). |
 | `test-data/expected.json` | What the importer must find in each real plan (module, blocks, days, hours, first and last date, no errors, no warnings). |
 | `tools/build_test_data.py` | Regenerates the files above from `~/CFGS`. Generated files are committed, so tests do not depend on that repository. |
-| `tools/check_plan.py` | Reference parser, the executable spec. `python3 tools/check_plan.py --selftest` runs all 14 checks (all pass). |
+| `tools/check_plan.py` | Reference parser, the executable spec. `python3 tools/check_plan.py --selftest` runs every plan and case plus a speed check (all pass). |
 
 What the real data showed:
 - **All three real plans are clean:** every day falls on a class weekday, outside holidays and inside the school year.

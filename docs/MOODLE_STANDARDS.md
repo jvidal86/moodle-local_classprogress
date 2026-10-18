@@ -20,7 +20,7 @@ One-page summary of the rules we follow, extracted on 2026-10-18 from real, well
 2. **A capability is not ownership.** Admins pass every capability check. Put the owner in the WHERE of every query, and test "user B cannot touch user A" with a same-capability teacher and an admin.
 3. **Capability:** `captype` write, `RISK_PERSONAL`, archetypes `editingteacher`, `teacher`, `manager`; never `user` (students would get in). Gate with `get_user_capability_course($cap, null, true, '', '', 1)`. Cache only the decision to show the link, never the enforcement.
 4. **Writes go through a `moodleform`** (sesskey and `setType` included) or `confirm && confirm_sesskey()` after a confirmation page. Redirect after a successful POST.
-5. **Output:** `s()` for plain text, `format_string()` for titles, `format_text($t, FORMAT_MARKDOWN, ['context' => $ctx])` for Markdown (always cleaned). Never `noclean`. `{{ }}` in templates; `{{{ }}}` only for URLs or text already through `format_text()`.
+5. **Output:** `s()` for plain text, `format_string()` for titles, `format_text($t, FORMAT_MARKDOWN, ['context' => $ctx])` for Markdown (always cleaned). Never `noclean`. `{{ }}` in templates; `{{{ }}}` only for URLs or text already through `format_text()` or `format_string()`.
 6. **SQL:** `$DB` methods with placeholders, `get_in_or_equal()` for lists. Multi-table writes in one `start_delegated_transaction()`; write the history row in the same transaction; trigger events after commit with ids only.
 7. **Excel:** `write_string()` for every teacher-written cell, never `write()` (it turns `=…` into formulas). Text type is guaranteed on all 4.5.x; releases from about 4.5.8 also prefix `'`, so convert Markdown bullets to "•" and compare visible text on both versions.
 8. **Privacy:** implement all three interfaces (`null_provider` is not allowed), in the teacher's user context, covering history too. Add a `user_deleted` observer. Test with `provider_testcase`.
@@ -48,7 +48,7 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 - [ ] `version.php`: `component`, bumped `version`, `requires`, `supported`, semver `release`, `maturity`. Any change to `db/hooks.php`, `caches.php`, `access.php`, `events.php` bumps the version.
 - [ ] New table or field: `install.xml` plus an `upgrade.php` step with a `field_exists`/`table_exists` guard and a savepoint equal to the new version.
 - [ ] Strings only in `lang/en`, sorted by `strcmp` byte order, with `_desc`, `cachedef_` and `privacy:metadata:` keys. No concatenated fragments.
-- [ ] Unique constraints as unique indexes (not keys) unless an FK target; key names like `planid-sessiondate`.
+- [ ] Unique constraints as unique indexes unless the column is also a foreign key, in which case a `foreign-unique` key (XMLDB refuses both on one column); key names like `planid-sessiondate`.
 - [ ] Templates have the `@template` docblock with an example context; `export_for_template()` returns only scalars, arrays and `stdClass`.
 - [ ] No `unserialize`, `print_r`, `error_log`, `extract`, `sizeof`; errors are `moodle_exception` with a lang string id.
 - [ ] In `@param` lines use `float[]`, `int[]`, `holiday_entry[]` or `array`, never generics with a space such as `array<int, float>`: Moodle's PHPDoc checker splits the type at the space and reports "incomplete parameters list" (found when merging the calendar, 2026-10-18). Run `moodle-plugin-ci phpdoc` before merging; phpcs alone does not catch it.

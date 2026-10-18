@@ -2,13 +2,17 @@
 """Check that every requirement is proved by a test, and that no test cites an unknown requirement.
 
 Requirements: docs/spec/REQUIREMENTS.md, headings like '### REQ-PLN-004 Title' followed by 'Phase: M2 · Status: draft'.
-Tests cite requirements by id. Scanned places: tests/ (PHPUnit docblock '@group REQ-X-001', Behat tag '@REQ-X-001'),
-test-data/ (the 'req' lists in the expected-results JSON files) and any *.feature file.
+A requirement counts as tested only through real test metadata (tightened after review round R1, finding R1-18):
+  - PHP files under tests/: a docblock tag '@group REQ-X-001'
+  - Behat *.feature files: a tag '@REQ-X-001' on a tag line
+  - JSON files under tests/ and test-data/: ids inside a "req" list
+Mentions anywhere else (comments, prose, Markdown) do not count.
 
     python3 tools/check_traceability.py                 # coverage matrix, exit 1 only for unknown or duplicate ids
     python3 tools/check_traceability.py --strict M2     # also exit 1 if any requirement of phase M0..M2 has no test
 """
 import argparse
+import json
 import re
 import sys
 from collections import defaultdict
@@ -19,7 +23,6 @@ ID = re.compile(r"REQ-[A-Z]{2,5}-\d{3}")
 HEAD = re.compile(r"^### (REQ-[A-Z]{2,5}-\d{3}) (.+)$")
 META = re.compile(r"^Phase: (M\d+) · Status: (\w+)")
 SCAN_DIRS = ["tests", "test-data"]
-SCAN_SUFFIXES = {".php", ".feature", ".json", ".py", ".md", ".yml", ".yaml", ".txt"}
 
 
 def read_requirements(path):
@@ -39,19 +42,47 @@ def read_requirements(path):
 
 def scan_citations():
     cites = defaultdict(set)
-    files = []
+
+    def add(rid, path):
+        cites[rid].add(str(path.relative_to(ROOT)))
+
+    def walk_json(node, path):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "req" and isinstance(value, list):
+                    for rid in value:
+                        if isinstance(rid, str) and ID.fullmatch(rid):
+                            add(rid, path)
+                else:
+                    walk_json(value, path)
+        elif isinstance(node, list):
+            for value in node:
+                walk_json(value, path)
+
+    group = re.compile(r"@group\s+(" + ID.pattern + r")\b")
     for d in SCAN_DIRS:
         base = ROOT / d
-        if base.exists():
-            files += [p for p in base.rglob("*") if p.is_file() and p.suffix in SCAN_SUFFIXES]
-    files += [p for p in ROOT.rglob("*.feature") if p not in files and ".git" not in p.parts]
-    for p in files:
-        try:
-            text = p.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
+        if not base.exists():
             continue
-        for rid in ID.findall(text):
-            cites[rid].add(str(p.relative_to(ROOT)))
+        for p in base.rglob("*"):
+            if not p.is_file():
+                continue
+            if p.suffix == ".php" and d == "tests":
+                for rid in group.findall(p.read_text(encoding="utf-8", errors="replace")):
+                    add(rid, p)
+            elif p.suffix == ".json":
+                try:
+                    walk_json(json.loads(p.read_text(encoding="utf-8")), p)
+                except (ValueError, UnicodeDecodeError):
+                    pass
+    for p in ROOT.rglob("*.feature"):
+        if ".git" in p.parts or "worktrees" in p.parts:
+            continue
+        for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.strip().startswith("@"):
+                for token in line.split():
+                    if token.startswith("@") and ID.fullmatch(token[1:]):
+                        add(token[1:], p)
     return cites
 
 

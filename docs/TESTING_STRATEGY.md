@@ -87,7 +87,7 @@ Policy: few, user-level, readable. Created with generators (`the following "cour
 |---|---|---|---|
 | J1 | A teacher sees the "Class progress" link; a student and a guest do not | M1 | ACC-001, ACC-002 |
 | J2 | A teacher creates a school year, pastes holidays (one bad line is reported) and sets a timetable; the session count is shown | M1 | HOL-001, HOL-002, CAL-001, CAL-002 |
-| J3 | Another teacher opens the first teacher's plan URL and gets the permission error | M1 | OWN-001, OWN-002 |
+| J3 | Another teacher opens the first teacher's plan URL and gets the same "not found or no permission" error as for a missing plan | M1 | OWN-001, OWN-002 |
 | J4 | Importing a plan with a bad date shows the error with its line and offers no approval | M2 | PLN-005, IMP-002, IMP-004 |
 | J5 | Importing a clean plan, reading the preview, approving (with confirmation of warnings) and finding the plan read-only afterwards | M2 | IMP-003, IMP-004, LCK-001, LCK-002 |
 | J6 | Logging a session on the day, then backfilling an old one: the second shows the late flag | M3 | to be specified |

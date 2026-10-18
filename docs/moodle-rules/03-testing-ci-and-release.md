@@ -12,7 +12,7 @@ Legend: ⚠ = legacy, version-specific (4.5 vs 5.x) or plugins disagree.
    **Do:** `namespace mod_h5pactivity\local; final class manager_test extends \advanced_testcase {`
    **Source:** c405 `mod/h5pactivity/tests/local/manager_test.php:31`; moodledev.io/docs/5.1/guides/testing ("MUST have a filename ending in `_test.php`", class name "exactly match the filename").
 
-2. **Rule:** Call `$this->resetAfterTest()` inside each test, immediately before the first data creation; never in a shared `setUp()`.
+2. **Rule:** In every test that creates or changes data, call `$this->resetAfterTest()` inside the test, immediately before the first data creation; never in a shared `setUp()`. Read-only tests need none (clarified in R1).
    **Why:** The 5.1 testing guide bans it in `setUp`; it hides which tests dirty the DB.
    **Do:** `$this->resetAfterTest(); $this->setAdminUser(); $course = $this->getDataGenerator()->create_course();`
    **Source:** c503 `public/mod/h5pactivity/tests/event/report_viewed_test.php:54`. ⚠ Disagreement: `aim tests/local/access_manager_test.php:34` and c405 `admin/tool/monitor/tests/privacy/provider_test.php:49` call it in `setUp()`. Follow the docs.
