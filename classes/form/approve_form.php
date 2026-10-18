@@ -25,7 +25,10 @@ require_once($CFG->libdir . '/formslib.php');
  * Confirmation of an approval: the fingerprint of what the teacher was shown and, when there are warnings, the
  * statement that they were read.
  *
- * Custom data: warnings, the number of warnings shown; seen, plan_service::fingerprint() of what is shown.
+ * The page sets seen, plan_service::fingerprint() of what it shows, with set_data(); a post without it gives an empty
+ * fingerprint, which approval refuses.
+ *
+ * Custom data: warnings, the number of warnings shown.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -43,7 +46,7 @@ class approve_form extends \moodleform {
         $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'action', 'approve');
         $mform->setType('action', PARAM_ALPHA);
-        $mform->addElement('hidden', 'seen', $this->_customdata['seen'] ?? '');
+        $mform->addElement('hidden', 'seen', '');
         $mform->setType('seen', PARAM_ALPHANUM);
 
         if (!empty($this->_customdata['warnings'])) {

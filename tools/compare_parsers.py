@@ -279,6 +279,18 @@ def body_line(rng):
     return words(rng, 1, 15)
 
 
+def wrap(rng, lines):
+    """The plan inside a code block, as an AI assistant may answer, with chat text around it (REQ-PLN-017)."""
+    char = rng.choice("`~")
+    length = rng.choice([3, 3, 3, 4, 5])
+    before = [words(rng, 1, 10) for _ in range(rng.randint(0, 2))] + rng.choice([[], [""]])
+    after = rng.choice([[], [""]]) + [words(rng, 1, 12) for _ in range(rng.randint(0, 2))]
+    closer = [] if rng.random() < 0.1 else [" " * rng.randint(0, 3) + char * (length + rng.choice([0, 0, 1]))]
+    if rng.random() < 0.15:  # a second block with a heading: the text is read as it is
+        after += [char * 3, heading(rng, 3, "2026-10-05 [2h]"), char * 3]
+    return before + [char * length + rng.choice(["", "markdown", "md", " text"])] + lines + closer + after
+
+
 def random_plan(seed, index):
     """One random plan and its inputs; the same seed and index always give the same plan."""
     rng = random.Random(f"{seed}:{index}")
@@ -305,6 +317,8 @@ def random_plan(seed, index):
                 lines.append(rng.choice(FENCES) + rng.choice(["", "", "sql", " bash"]))
         else:
             lines.append(heading(rng, 1, module_text(rng)))
+    if rng.random() < 0.2:
+        lines = wrap(rng, lines)
     scheme = rng.random()
     if scheme < 0.45:
         breaks = ["\n"] * len(lines)
@@ -397,6 +411,12 @@ PROBES = [
     ("roman numeral and superscript in a word", plan(*HEAD, "### d\u217c 05/10/2026", "### Sun\u00b2 05/10/2026"), {}),
     ("decomposed accent in mié", plan(*HEAD, "### mie\u0301 14/10/2026 [2h]", "- a"), {}),
     ("not a weekday word", plan(*HEAD, "### Setmana 16/10/2026 [2h]", "- a", "### S\u00c1B 17/10/2026 [2h]", "- b"), {}),
+    ("plan in a code block with text around it", plan("Here it is:", "```markdown", *HEAD, "### 2026-10-05 [2h]", "- a",
+                                                       "```", "Anything else?"), {}),
+    ("plan in a code block that is never closed", plan("~~~~", *HEAD, "### 2026-10-05 [2h]", "- a"), {}),
+    ("two code blocks with headings", plan("```", "# MP01 · A", "```", "```", "### 2026-10-05 [2h]", "```"), {}),
+    ("a heading outside the code block", plan("## RA1", "```", "# MP01 · A", "### 2026-10-05 [2h]", "```"), {}),
+    ("only a level-4 heading outside", plan("#### Notes", "```", "# MP01 · A", "### 2026-10-05 [2h]", "```"), {}),
 ]
 
 def main():

@@ -880,6 +880,38 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
+     * A plan inside one code block, with a sentence before and after it, is read from the block, with the line numbers
+     * of the whole text and the warning unwrapped_fence; so is a block that is never closed. A text with a heading
+     * outside code blocks, or with two blocks that hold headings, is read as before.
+     *
+     * @group REQ-PLN-017
+     */
+    public function test_a_plan_wrapped_in_a_code_block_is_unwrapped(): void {
+        $lines = ['Here is your plan:', '', self::BACKTICKS . 'markdown', '# MP03 · Programació', '## RA1', '### 2026-10-05',
+            '- a', '### 2026-02-30', self::BACKTICKS, '', 'Si vols, puc afegir més sessions.'];
+        $result = self::parse(self::md(...$lines));
+
+        $this->assertSame(['MP03', 4], [$result->module->code, $result->module->line]);
+        $this->assertSame(['RA1'], $result->blocks);
+        $this->assertCount(1, $result->days);
+        $this->assertSame([6, '- a'], [$result->days[0]->line, $result->days[0]->content]);
+        $this->assertSame(['warning unwrapped_fence 3', 'error bad_date 8'], self::issues($result));
+
+        $unclosed = self::parse(self::md('Plan:', '~~~', '# MP03 · P', '## RA1', '### 2026-10-05', '- a'));
+        $this->assertCount(1, $unclosed->days);
+        $this->assertSame(['warning unwrapped_fence 2'], self::issues($unclosed));
+
+        $outside = self::parse(self::md('# MP03 · P', self::BACKTICKS, '## RA1', '### 2026-10-05', '- a', self::BACKTICKS));
+        $this->assertSame([[], []], [$outside->blocks, $outside->days]);
+        $this->assertSame([], self::issues($outside));
+
+        $lines = [self::BACKTICKS, '### 2026-10-05', self::BACKTICKS, self::BACKTICKS, '### 2026-10-09', self::BACKTICKS];
+        $two = self::parse(self::md(...$lines));
+        $this->assertSame([], $two->days);
+        $this->assertSame(['warning no_module_heading 1'], self::issues($two));
+    }
+
+    /**
      * Lines of thousands of hashes, backticks, tildes, digits, letters or spaces, about 2 MB in all, take well under a
      * second.
      *

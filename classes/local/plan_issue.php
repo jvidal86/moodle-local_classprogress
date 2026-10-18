@@ -71,6 +71,9 @@ final class plan_issue {
     /** @var string Warning: a code fence is still open at the end of the text; the line is where it opened. No parameters. */
     public const UNCLOSED_FENCE = 'unclosed_fence';
 
+    /** @var string Warning: the plan was read from inside the code block that opens at the line (REQ-PLN-017). No parameters. */
+    public const UNWRAPPED_FENCE = 'unwrapped_fence';
+
     /**
      * Creates the issue.
      *

@@ -65,10 +65,7 @@ if ($plan && $action === 'approve') {
     $title = get_string('approveplan', 'local_classprogress');
     $result = plan_service::check_stored($USER->id, $id);
     $approveurl = new \core\url($url, ['action' => 'approve']);
-    $form = new approve_form($approveurl, [
-        'warnings' => plan_service::count_issues($result, plan_issue::WARNING),
-        'seen' => plan_service::fingerprint($result),
-    ]);
+    $form = new approve_form($approveurl, ['warnings' => plan_service::count_issues($result, plan_issue::WARNING)]);
     if ($form->is_cancelled()) {
         redirect($url);
     } else if ($data = $form->get_data()) {
@@ -83,7 +80,7 @@ if ($plan && $action === 'approve') {
         }
         redirect($url, get_string('planapproved', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
     }
-    $form->set_data(['id' => $id]);
+    $form->set_data(['id' => $id, 'seen' => plan_service::fingerprint($result)]);
     $PAGE->set_title($title);
     $PAGE->navbar->add($name, $url);
     $PAGE->navbar->add($title);

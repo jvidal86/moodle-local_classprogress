@@ -23,6 +23,10 @@ namespace local_classprogress\local;
  * summarize(), and tools/compare_parsers.py checks that on the fixtures and on random plans. The one input the
  * reference cannot receive, bytes that are not UTF-8, gives the single error not_utf8 (REQ-PLN-015).
  *
+ * A plan wrapped in a code block, as AI assistants often answer, is unwrapped (REQ-PLN-017): when no heading of level 1
+ * to 3 lies outside code fences and exactly one fenced block holds such headings, the block's content is read as the
+ * plan, with the line numbers of the whole text, and the warning unwrapped_fence is given at the line that opens it.
+ *
  * Every pattern runs in linear time (REQ-PLN-016). No Moodle functions, constants or globals, and no clock.
  *
  * @package    local_classprogress
@@ -108,8 +112,9 @@ final class plan_parser {
         $current = null;
         $fence = null;
         $previous = null;
-        foreach (self::lines($text) as $index => $line) {
-            $number = $index + 1;
+        [$lines, $before, $wrapper] = self::unwrap(self::lines($text));
+        foreach ($lines as $index => $line) {
+            $number = $before + $index + 1;
             $heading = null;
             if ($fence === null) {
                 $fence = self::opening_fence($line, $number);
@@ -174,6 +179,9 @@ final class plan_parser {
                 'body' => []];
             $current = count($days) - 1;
         }
+        if ($wrapper !== null) {
+            $issues[] = self::warning(plan_issue::UNWRAPPED_FENCE, $wrapper);
+        }
         if ($fence !== null) {
             $issues[] = self::warning(plan_issue::UNCLOSED_FENCE, $fence['line']);
         }
@@ -195,6 +203,42 @@ final class plan_parser {
         // Stable since PHP 8.0, so issues on one line keep the order in which they were found, as in the reference.
         usort($issues, fn(plan_issue $a, plan_issue $b): int => $a->line <=> $b->line);
         return new plan_result($modules[0] ?? null, $blocks, $result, $issues);
+    }
+
+    /**
+     * Finds the plan inside the only code block that holds headings of level 1 to 3, when no such heading lies outside
+     * code blocks (REQ-PLN-017).
+     *
+     * @param string[] $lines Every line of the text.
+     * @return array [lines to read, number of lines before them, line of the opening fence or null when nothing was
+     *     unwrapped].
+     */
+    private static function unwrap(array $lines): array {
+        // Each block: index of the opening line, index of the closing line (or the number of lines), holds headings.
+        $blocks = [];
+        $fence = null;
+        $outside = false;
+        foreach ($lines as $index => $line) {
+            if ($fence === null) {
+                $fence = self::opening_fence($line, $index + 1);
+                if ($fence !== null) {
+                    $blocks[] = [$index, count($lines), false];
+                } else if (self::heading($line) !== null) {
+                    $outside = true;
+                }
+            } else if (self::closes_fence($line, $fence)) {
+                $blocks[count($blocks) - 1][1] = $index;
+                $fence = null;
+            } else if (self::heading($line) !== null) {
+                $blocks[count($blocks) - 1][2] = true;
+            }
+        }
+        $wrapped = array_values(array_filter($blocks, fn(array $block): bool => $block[2]));
+        if ($outside || count($wrapped) !== 1) {
+            return [$lines, 0, null];
+        }
+        [$start, $end] = $wrapped[0];
+        return [array_slice($lines, $start + 1, $end - $start - 1), $start + 1, $start + 1];
     }
 
     /**

@@ -16,6 +16,9 @@
 
 namespace local_classprogress\form;
 
+use local_classprogress\local\plan_service;
+use local_classprogress\local\schoolyear_service;
+
 /**
  * Tests for the import and approval forms: what a posted form gives the page.
  *
@@ -113,13 +116,47 @@ final class import_form_test extends \advanced_testcase {
         $seen = sha1('seen');
 
         approve_form::mock_submit(['id' => 1, 'seen' => $seen]);
-        $this->assertNull((new approve_form($url, ['warnings' => 2, 'seen' => $seen]))->get_data());
+        $this->assertNull((new approve_form($url, ['warnings' => 2]))->get_data());
 
         approve_form::mock_submit(['id' => 1, 'seen' => $seen, 'warningsread' => 1]);
-        $data = (new approve_form($url, ['warnings' => 2, 'seen' => $seen]))->get_data();
+        $data = (new approve_form($url, ['warnings' => 2]))->get_data();
         $this->assertSame([$seen, 1], [$data->seen, (int) $data->warningsread]);
 
         approve_form::mock_submit(['id' => 1, 'seen' => $seen]);
-        $this->assertNotNull((new approve_form($url, ['warnings' => 0, 'seen' => $seen]))->get_data());
+        $this->assertNotNull((new approve_form($url, ['warnings' => 0]))->get_data());
+    }
+
+    /**
+     * An approval posted without the fingerprint of what the teacher saw gives an empty one, never that of the text as
+     * stored now, so the service refuses it as changed elsewhere and the plan stays a draft (R2-1).
+     *
+     * @group REQ-IMP-004
+     * @group REQ-DAT-003
+     */
+    public function test_an_approval_posted_without_the_fingerprint_is_refused(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_and_enrol($this->getDataGenerator()->create_course(), 'editingteacher');
+        $this->setUser($user);
+        $yearid = schoolyear_service::create($user->id, (object) ['name' => 'Curs', 'startdate' => '2026-09-14',
+            'enddate' => '2027-06-21']);
+        $id = plan_service::create($user->id, (object) ['schoolyearid' => $yearid, 'moduletitle' => 'P',
+            'timetable' => [0 => 2]]);
+        plan_service::import($user->id, $id, "# MP03 · P\n## RA1\n### 2026-09-14\nx\n");
+        $url = new \moodle_url('/local/classprogress/plan.php', ['id' => $id, 'action' => 'approve']);
+
+        $current = plan_service::fingerprint(plan_service::check_stored($user->id, $id));
+
+        // A hand-made post: id and action, no "seen". Custom data as the page once passed it must not fill the field.
+        approve_form::mock_submit(['id' => $id, 'action' => 'approve']);
+        $data = (new approve_form($url, ['warnings' => 0, 'seen' => $current]))->get_data();
+
+        $this->assertSame('', $data->seen);
+        try {
+            plan_service::approve($user->id, $id, $data->seen, false);
+            $this->fail('Expected an exception');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('error_changedelsewhere', $e->errorcode);
+        }
+        $this->assertSame(plan_service::STATUS_DRAFT, plan_service::get($user->id, $id)->status);
     }
 }

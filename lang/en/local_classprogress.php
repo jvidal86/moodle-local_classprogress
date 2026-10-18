@@ -25,10 +25,10 @@
 $string['addevaluation'] = 'Add an evaluation period';
 $string['addplan'] = 'New plan';
 $string['addschoolyear'] = 'New school year';
-$string['aiinstructions'] = 'Write my year plan as Markdown, in exactly this format, so that I can import it into Moodle.
+$string['aiinstructions'] = 'Write my year plan as Markdown, in exactly the format below, so that I can import it into Moodle. Output only the plan, with nothing after it: anything after the last day would be read as part of that day.
 
 # <module code> · <module title>
-(once, on the first line)
+(once, as the first heading)
 
 ## <RA or block> · <title>
 (one heading for each learning outcome or block)
@@ -41,8 +41,7 @@ Rules:
 - Write dates as 2026-09-16 or 16/09/2026. A weekday may come before the date (dl, dt, dc, dj, dv, Mon, Tue, lun, mar, ...).
 - Write hours as [2h] or [1,5h]. Leave them out to use the hours of my weekly timetable.
 - Everything under a ### heading, up to the next heading, is that day\'s plan.
-- Do not add any other # heading. Do not use #, ## or ### headings inside a day.
-- Text before the first heading is ignored, so you may add notes there.';
+- Do not add any other # heading. Do not use #, ## or ### headings inside a day.';
 $string['aiinstructionsheading'] = 'Instructions for my AI assistant';
 $string['aiinstructionsintro'] = 'To have an AI assistant write or convert your plan, copy these instructions into the chat together with your own plan, then paste its answer here.';
 $string['allsessions'] = 'All sessions';
@@ -147,6 +146,7 @@ $string['issue_title_too_long'] = 'The title of the day {$a->date} is longer tha
 $string['issue_too_many_days'] = 'The plan has more than {$a->max} days, the most a plan can have. This is the first day over the limit.';
 $string['issue_too_many_hours'] = 'The day {$a->date} has {$a->hours} hours; a day can have at most 24.';
 $string['issue_unclosed_fence'] = 'A code block opens here and is never closed, so it may hide the days after it.';
+$string['issue_unwrapped_fence'] = 'The plan was inside a code block, so it was read from that block and the text around the block was left out.';
 $string['issue_weekday_mismatch'] = 'The weekday "{$a->weekday}" is not the weekday of {$a->date}.';
 $string['issueline'] = 'Line {$a->line}: {$a->message}';
 $string['lastclassday'] = 'Last class day';

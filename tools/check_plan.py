@@ -13,12 +13,15 @@ Headings inside code fences, and headings of level 4 or more, are part of the bo
 up to 3 spaces, then 3+ backticks or tildes; a backtick fence's info text has no backtick; it closes with the same
 character, at least as long (REQ-PLN-008). Text before the first heading is ignored. Several days may share a date.
 Input: a leading BOM is ignored; lines end with LF, CRLF or CR (REQ-PLN-015). Every step is linear in the input
-(REQ-PLN-016).
+(REQ-PLN-016). A plan wrapped in a code block, as AI assistants often answer, is unwrapped: when no heading of level
+1 to 3 lies outside code fences and exactly one fenced block holds such headings, that block's content is read as the
+plan, with line numbers of the whole text (REQ-PLN-017).
 
 Issues
     errors (block approval):   bad_date, multiple_modules
     warnings (must be confirmed): no_module_heading, no_block, empty_day, out_of_order, on_holiday,
-                                  weekday_mismatch, no_class_weekday, outside_year, missing_hours, unclosed_fence
+                                  weekday_mismatch, no_class_weekday, outside_year, missing_hours, unclosed_fence,
+                                  unwrapped_fence
 
 Usage
     python3 tools/check_plan.py test-data/plans/0372.md --holidays test-data/holidays-centre-2026-27.txt \
@@ -62,6 +65,48 @@ def split_lines(text):
     if text.startswith("\ufeff"):
         text = text[1:]
     return LINE_BREAK.split(text)
+
+
+def opens_fence(line):
+    """(character, length) of the code fence a line opens, or None (REQ-PLN-008)."""
+    f = OPEN_FENCE.match(line)
+    if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):
+        return f.group(1)[0], len(f.group(1))
+    return None
+
+
+def closes_fence(line, fence):
+    """Whether a line closes an open fence: its own character, at least as long, nothing but spaces after."""
+    return re.match(r"^ {0,3}" + re.escape(fence[0]) + "{" + str(fence[1]) + r",}[ \t]*$", line) is not None
+
+
+def is_structure(line):
+    m = HEADING.match(line)
+    return m is not None and len(m.group(1)) <= 3
+
+
+def unwrap(lines):
+    """REQ-PLN-017: (lines to read, number of lines before them, line of the wrapping fence or None)."""
+    blocks = []           # [index of the opening line, index of the closing line or len(lines), holds headings]
+    fence = None
+    outside = False
+    for i, line in enumerate(lines):
+        if fence is None:
+            fence = opens_fence(line)
+            if fence:
+                blocks.append([i, len(lines), False])
+            elif is_structure(line):
+                outside = True
+        elif closes_fence(line, fence):
+            blocks[-1][1] = i
+            fence = None
+        elif is_structure(line):
+            blocks[-1][2] = True
+    wrapped = [b for b in blocks if b[2]]
+    if outside or len(wrapped) != 1:
+        return lines, 0, None
+    start, end, _ = wrapped[0]
+    return lines[start + 1:end], start + 1, start + 1
 
 
 def heading_title(rest):
@@ -139,15 +184,16 @@ def parse(text, holidays=None, timetable=None, year=None):
         if current is not None:
             current["content"] = "\n".join(current["body"]).strip()
 
-    for no, line in enumerate(split_lines(text), 1):
+    lines, before, wrapper = unwrap(split_lines(text))
+    for no, line in enumerate(lines, before + 1):
         m = None
         if fence is None:
-            f = OPEN_FENCE.match(line)
-            if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):
-                fence = (f.group(1)[0], len(f.group(1)), no)
+            f = opens_fence(line)
+            if f:
+                fence = (f[0], f[1], no)
             else:
                 m = HEADING.match(line)
-        elif re.match(r"^ {0,3}" + re.escape(fence[0]) + "{" + str(fence[1]) + r",}[ \t]*$", line):
+        elif closes_fence(line, fence):
             fence = None
         level = len(m.group(1)) if m else 0
         if level in (1, 2, 3):
@@ -196,6 +242,8 @@ def parse(text, holidays=None, timetable=None, year=None):
         elif current is not None:
             current["body"].append(line)
     close_day()
+    if wrapper is not None:
+        issue("warning", "unwrapped_fence", wrapper, "The plan was inside a code block; the block was read as the plan")
     if fence is not None:
         issue("warning", "unclosed_fence", fence[2], "A code fence is never closed; it may hide later days")
 

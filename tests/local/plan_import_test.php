@@ -489,30 +489,36 @@ final class plan_import_test extends \advanced_testcase {
     }
 
     /**
-     * Every write of an import is part of one transaction: when it is rolled back, the text, the items and the log row
-     * all go, and the plan is as before.
+     * A failure in the last write of an import (the import log row) undoes the writes before it: the plan's text and
+     * module, and its items. The log table is renamed away so that the insert fails; without the transaction the plan
+     * would be left half-saved (R2-2).
      *
      * @group REQ-IMP-005
      */
-    public function test_an_import_is_written_in_one_transaction(): void {
+    public function test_a_failure_in_the_middle_of_an_import_rolls_everything_back(): void {
         global $DB;
 
         $this->resetAfterTest();
-        // The test's own transaction would make this one nested, and only the outermost one really rolls back.
+        // The test's own transaction would make the import's one nested, and only the outermost one really rolls back.
         $this->preventResetByRollback();
         [$user, $id] = $this->draft();
-        $before = self::rows($id);
-
-        $transaction = $DB->start_delegated_transaction();
-        plan_service::import($user->id, $id, self::PLAN);
-        $this->assertCount(3, plan_service::items($user->id, $id));
+        plan_service::import($user->id, $id, "# MP 0001 · First\n## RA0\n### 2026-09-21 [1h]\nfirst\n");
+        $plan = $DB->get_record('local_classprogress_plan', ['id' => $id]);
+        $items = $DB->get_records('local_classprogress_planitem', ['planid' => $id], 'id');
+        $dbman = $DB->get_manager();
+        $dbman->rename_table(new \xmldb_table('local_classprogress_import'), 'local_classprogress_gone');
         try {
-            $transaction->rollback(new \moodle_exception('error_notfound', 'local_classprogress'));
-        } catch (\moodle_exception $e) {
-            $this->assertSame('error_notfound', $e->errorcode);
+            try {
+                plan_service::import($user->id, $id, self::PLAN);
+                $this->fail('Expected the import to fail');
+            } catch (\dml_exception $e) {
+                $this->assertFalse($DB->is_transaction_started());
+            }
+            $this->assertEquals($plan, $DB->get_record('local_classprogress_plan', ['id' => $id]));
+            $this->assertEquals($items, $DB->get_records('local_classprogress_planitem', ['planid' => $id], 'id'));
+        } finally {
+            $dbman->rename_table(new \xmldb_table('local_classprogress_gone'), 'local_classprogress_import');
         }
-
-        $this->assertEquals($before, self::rows($id));
     }
 
     /**
