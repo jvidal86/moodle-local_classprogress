@@ -136,8 +136,11 @@ final class index_page implements \renderable, \templatable {
         $calendar = $this->calendars[$plan->id];
         $course = $this->courses[$plan->courseid ?? 0] ?? null;
         $courseid = (int) ($plan->courseid ?? 0);
+        $draft = $plan->status === plan_service::STATUS_DRAFT;
         return [
             'name' => self::plan_name($plan),
+            'status' => get_string($draft ? 'statusdraftshort' : 'statusapprovedshort', 'local_classprogress'),
+            'candelete' => $draft,
             'course' => $course === null ? '' : format_string($course, true, ['context' => \context_course::instance($courseid)]),
             'dates' => $plan->startdate && $plan->enddate ? self::dates($plan->startdate, $plan->enddate) : '',
             'sessions' => $calendar->code === null ? count($calendar->sessions) : '',

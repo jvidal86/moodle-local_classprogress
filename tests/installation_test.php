@@ -47,4 +47,26 @@ final class installation_test extends \advanced_testcase {
         $this->assertNotNull($info->versiondb);
         $this->assertSame((int) $info->versiondisk, (int) $info->versiondb);
     }
+
+    /**
+     * The plan size and day limits are integer settings on the plugin's admin page: 200 KB and 400 days by default.
+     *
+     * @group REQ-IMP-001
+     */
+    public function test_the_plan_limits_are_admin_settings(): void {
+        global $CFG;
+        require_once($CFG->libdir . '/adminlib.php');
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $page = admin_get_root(true, true)->locate('local_classprogress');
+
+        $this->assertInstanceOf(\admin_settingpage::class, $page);
+        foreach (['maxplansize' => 200, 'maxplandays' => 400] as $name => $default) {
+            $setting = $page->settings->{'local_classprogress' . $name};
+            $this->assertSame('local_classprogress', $setting->plugin);
+            $this->assertSame($default, $setting->get_defaultsetting());
+            $this->assertSame(PARAM_INT, $setting->paramtype);
+        }
+    }
 }

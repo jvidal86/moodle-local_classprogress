@@ -259,7 +259,7 @@ History rows are never edited and survive the deletion of their entry. The histo
 
 ### REQ-IMP-001 Input and limits
 Phase: M2 · Status: agreed
-A plan is pasted as text or read from an uploaded `.md` file (the file is not stored). Text above the size limit (default 200 KB) or with more than the day limit (default 400) is refused with a message.
+A plan is pasted as text or read from an uploaded `.md` file (the file is not stored). Text above the size limit (default 200 KB) or with more than the day limit (default 400) is refused with a message. Recorded in M2: a plan is also refused with `no_days` (no day heading at all), `too_many_days`, `out_of_range` (a date outside the REQ-CAL-004 window), `module_too_long`, `block_too_long` or `title_too_long` (over 255 characters, the database limit) and `too_many_hours` (a day over 24 hours).
 
 ### REQ-IMP-002 Preview
 Phase: M2 · Status: agreed
@@ -267,11 +267,11 @@ Before anything is saved the teacher sees the module, blocks, number of days and
 
 ### REQ-IMP-003 Draft plan
 Phase: M2 · Status: agreed
-Importing saves a draft plan. A draft can be replaced or deleted; an approved plan cannot.
+Importing saves a draft plan. A draft can be replaced or deleted; an approved plan cannot. Recorded in M2: a `#` module heading replaces the code and the title typed for the draft, each only when the heading gives it; re-importing a draft replaces its text and days, keeps the plan's dates, and adds a row to the import log.
 
 ### REQ-IMP-004 Approval rules
 Phase: M2 · Status: agreed
-Approval is impossible while the plan has errors. Warnings must be shown and explicitly confirmed. Approval asks for confirmation.
+Approval is impossible while the plan has errors. Warnings must be shown and explicitly confirmed. Approval asks for confirmation. Recorded in M2: approval is refused if the plan changed since the teacher's preview (a fingerprint of what was shown); approval only changes the status, the days are written by the import.
 
 ### REQ-IMP-005 All or nothing
 Phase: M2 · Status: agreed

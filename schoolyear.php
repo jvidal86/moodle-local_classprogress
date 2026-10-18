@@ -77,7 +77,7 @@ $PAGE->set_title($title);
 $PAGE->navbar->add($title);
 
 $evaluations = $year ? schoolyear_service::evaluations($USER->id, $id) : [];
-$form = new schoolyear_form($url, ['evaluationcount' => count($evaluations)]);
+$form = new schoolyear_form($url, ['evaluationcount' => count($evaluations), 'userid' => (int) $USER->id]);
 $stale = false;
 if ($form->is_cancelled()) {
     redirect($indexurl);

@@ -29,7 +29,9 @@ namespace local_classprogress\local;
  * holiday text) and evaluations (a list of objects or arrays with name, startdate and enddate). On update, data without
  * holidays or evaluations leaves them as they are (the stored evaluation periods must still fit the new dates), and data
  * with timemodified, the version the change was made from, is refused when the stored school year is newer. Every date
- * lies within dates::FIRST_DAY to dates::LAST_DAY, and a school year is at most dates::MAX_DAYS long.
+ * lies within dates::FIRST_DAY to dates::LAST_DAY, and a school year is at most dates::MAX_DAYS long. New dates must keep
+ * inside the school year the first and last class day of each of its plans and every day of its approved plans, where
+ * they lay inside it before (a day already outside, a warning the teacher confirmed, does not block a change).
  *
  * Changing or deleting a school year, and creating or moving a plan into it, hold the school year's lock (lock()), so
  * no plan is ever left in a school year that was deleted at the same moment.
@@ -115,7 +117,7 @@ final class schoolyear_service {
             self::require_current($year, $data);
             $check = clone $data;
             $check->evaluations ??= array_values(self::evaluations($userid, $id));
-            self::require_valid($check);
+            self::require_valid($check, $userid, $id);
             self::write($id, $data, max(time(), (int) $year->timemodified + 1));
         } finally {
             $lock->release();
@@ -299,9 +301,11 @@ final class schoolyear_service {
      * evaluation under key N of the evaluations array.
      *
      * @param \stdClass $data School year data (see the class description).
+     * @param int $userid The acting user, when the data changes a stored school year.
+     * @param int $id The stored school year the data changes, whose plans must stay inside the new dates; 0 for none.
      * @return string[] Field => lang string id of the error, in field order; empty when the data is valid.
      */
-    public static function validate(\stdClass $data): array {
+    public static function validate(\stdClass $data, int $userid = 0, int $id = 0): array {
         $errors = [];
         if (!self::is_name((string) ($data->name ?? ''), self::MAX_NAME)) {
             $errors['name'] = 'error_name';
@@ -315,6 +319,8 @@ final class schoolyear_service {
                 $errors['enddate'] = 'error_endbeforestart';
             } else if ($range === dates::TOO_LONG) {
                 $errors['enddate'] = 'error_yeartoolong';
+            } else if ($id) {
+                $errors += self::plan_date_errors($userid, $id, $start, $end);
             }
         }
         if (isset($data->holidays)) {
@@ -415,13 +421,52 @@ final class schoolyear_service {
     }
 
     /**
+     * Checks that new dates of a stored school year keep its plans' dates inside, where they lay inside before: the
+     * first and last class day of every plan, and every day of an approved plan.
+     *
+     * @param int $userid The acting user.
+     * @param int $id School year id.
+     * @param string $start New first day, a valid date.
+     * @param string $end New last day, a valid date.
+     * @return string[] startdate and enddate => error_yearexcludesplans, for the ends that would leave a date out.
+     */
+    private static function plan_date_errors(int $userid, int $id, string $start, string $end): array {
+        global $DB;
+
+        $year = $DB->get_record(self::YEAR, ['id' => $id, 'userid' => $userid]);
+        if (!$year) {
+            return [];
+        }
+        $dates = [];
+        foreach ($DB->get_records('local_classprogress_plan', ['schoolyearid' => $id, 'userid' => $userid]) as $plan) {
+            array_push($dates, (string) $plan->startdate, (string) $plan->enddate);
+        }
+        $sql = 'SELECT DISTINCT i.sessiondate
+                  FROM {local_classprogress_planitem} i
+                  JOIN {local_classprogress_plan} p ON p.id = i.planid
+                 WHERE p.schoolyearid = :yearid AND p.userid = :userid AND p.status = :status';
+        $params = ['yearid' => $id, 'userid' => $userid, 'status' => plan_service::STATUS_APPROVED];
+        $dates = array_merge($dates, $DB->get_fieldset_sql($sql, $params));
+        $out = ['startdate' => false, 'enddate' => false];
+        foreach ($dates as $date) {
+            if (dates::is_date($date) && dates::within($date, $year->startdate, $year->enddate)) {
+                $out['startdate'] = $out['startdate'] || dates::day_number($date) < dates::day_number($start);
+                $out['enddate'] = $out['enddate'] || dates::day_number($date) > dates::day_number($end);
+            }
+        }
+        return array_map(fn(): string => 'error_yearexcludesplans', array_filter($out));
+    }
+
+    /**
      * Throws the first validation error, if there is one.
      *
      * @param \stdClass $data School year data.
+     * @param int $userid The acting user.
+     * @param int $id The stored school year the data changes; 0 for a new one.
      * @throws \moodle_exception With the lang string id of the first error.
      */
-    private static function require_valid(\stdClass $data): void {
-        $errors = self::validate($data);
+    private static function require_valid(\stdClass $data, int $userid = 0, int $id = 0): void {
+        $errors = self::validate($data, $userid, $id);
         if ($errors) {
             throw new \moodle_exception(reset($errors), 'local_classprogress');
         }

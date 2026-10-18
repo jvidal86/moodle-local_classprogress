@@ -511,6 +511,72 @@ final class schoolyear_service_test extends \advanced_testcase {
     }
 
     /**
+     * A school year cannot shrink past the class days of its plans: the first and last class day of any plan, and the
+     * days of an approved plan, must stay inside it. The form gets the same answer from validate().
+     *
+     * @group REQ-CAL-004
+     * @group REQ-LCK-004
+     */
+    public function test_shrinking_a_year_keeps_the_dates_of_its_plans_inside(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $id = schoolyear_service::create($user->id, self::yeardata(['evaluations' => []]));
+        $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => '2026-10-01', 'enddate' => '2027-05-24']);
+        $approved = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null,
+            'status' => 'approved']);
+        $this->generator()->create_planitem(['planid' => $approved->id, 'sessiondate' => '2026-09-21']);
+        $this->generator()->create_planitem(['planid' => $approved->id, 'sessiondate' => '2027-06-07']);
+        $draft = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null]);
+        $this->generator()->create_planitem(['planid' => $draft->id, 'sessiondate' => '2026-09-14']);
+        $data = fn(string $start, string $end): \stdClass => self::yeardata(['startdate' => $start, 'enddate' => $end,
+            'holidays' => '', 'evaluations' => []]);
+        $refused = [
+            ['2026-09-14', '2027-05-23', 'enddate'],
+            ['2026-10-02', '2027-06-21', 'startdate'],
+            ['2026-09-22', '2027-06-21', 'startdate'],
+            ['2026-09-14', '2027-06-06', 'enddate'],
+        ];
+
+        foreach ($refused as [$start, $end, $field]) {
+            $errors = schoolyear_service::validate($data($start, $end), $user->id, $id);
+            $this->assertSame([$field => 'error_yearexcludesplans'], $errors);
+            try {
+                schoolyear_service::update($user->id, $id, $data($start, $end));
+                $this->fail('Expected an exception');
+            } catch (\moodle_exception $e) {
+                $this->assertSame('error_yearexcludesplans', $e->errorcode);
+            }
+            $year = schoolyear_service::get($user->id, $id);
+            $this->assertSame(['2026-09-14', '2027-06-21'], [$year->startdate, $year->enddate]);
+        }
+
+        schoolyear_service::update($user->id, $id, $data('2026-09-21', '2027-06-07'));
+        $this->assertSame('2026-09-21', schoolyear_service::get($user->id, $id)->startdate);
+        $this->assertSame('2027-06-07', schoolyear_service::get($user->id, $id)->enddate);
+    }
+
+    /**
+     * A day of an approved plan that already lay outside the school year (a warning the teacher confirmed) does not
+     * block other changes to it.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_a_day_already_outside_the_year_does_not_block_changes(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $id = schoolyear_service::create($user->id, self::yeardata(['evaluations' => []]));
+        $plan = $this->generator()->create_plan(['schoolyearid' => $id, 'startdate' => null, 'enddate' => null,
+            'status' => 'approved']);
+        $this->generator()->create_planitem(['planid' => $plan->id, 'sessiondate' => '2027-07-01']);
+
+        schoolyear_service::update($user->id, $id, self::yeardata(['name' => 'Renamed', 'enddate' => '2027-06-14',
+            'evaluations' => []]));
+
+        $this->assertSame('Renamed', schoolyear_service::get($user->id, $id)->name);
+        $this->assertSame('2027-06-14', schoolyear_service::get($user->id, $id)->enddate);
+    }
+
+    /**
      * Shrinking a school year without sending its evaluation periods checks the stored ones against the new dates.
      */
     public function test_update_without_evaluations_checks_the_stored_ones(): void {

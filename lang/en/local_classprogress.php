@@ -25,7 +25,31 @@
 $string['addevaluation'] = 'Add an evaluation period';
 $string['addplan'] = 'New plan';
 $string['addschoolyear'] = 'New school year';
+$string['aiinstructions'] = 'Write my year plan as Markdown, in exactly this format, so that I can import it into Moodle.
+
+# <module code> · <module title>
+(once, on the first line)
+
+## <RA or block> · <title>
+(one heading for each learning outcome or block)
+
+### <date> [<hours>h] <optional short title>
+<what we do that day, as a Markdown list; bold and links are allowed>
+
+Rules:
+- One ### heading for each class day, in date order. Two days on the same date are allowed.
+- Write dates as 2026-09-16 or 16/09/2026. A weekday may come before the date (dl, dt, dc, dj, dv, Mon, Tue, lun, mar, ...).
+- Write hours as [2h] or [1,5h]. Leave them out to use the hours of my weekly timetable.
+- Everything under a ### heading, up to the next heading, is that day\'s plan.
+- Do not add any other # heading. Do not use #, ## or ### headings inside a day.
+- Text before the first heading is ignored, so you may add notes there.';
+$string['aiinstructionsheading'] = 'Instructions for my AI assistant';
+$string['aiinstructionsintro'] = 'To have an AI assistant write or convert your plan, copy these instructions into the chat together with your own plan, then paste its answer here.';
 $string['allsessions'] = 'All sessions';
+$string['approveplan'] = 'Approve plan';
+$string['approveplanintro'] = 'Approval is final. Once the plan is approved, its days, dates, hours, text and timetable can no longer be changed, and the plan cannot be deleted. Check the days below before you approve it.';
+$string['approveplannoerrors'] = 'The plan text has errors, so the plan cannot be approved. Import a corrected text first.';
+$string['block'] = 'RA or block';
 $string['cachedef_showlink'] = 'Whether the Class progress link is shown to the current user';
 $string['calendar'] = 'Calendar';
 $string['calendar_invalid_date'] = 'The first or the last class day is not a valid date.';
@@ -34,6 +58,7 @@ $string['calendar_missing_dates'] = 'Enter the first and the last class day to s
 $string['calendar_out_of_range'] = 'The first or the last class day is not between 2000-01-01 and 2099-12-31, so there is no calendar.';
 $string['calendar_too_long'] = 'The class days span more than 400 days, so there is no calendar.';
 $string['calendarsummary'] = '{$a->sessions}, {$a->hours}';
+$string['changetext'] = 'Change the text';
 $string['classdays'] = 'Class days';
 $string['classprogress:use'] = 'Use Class progress';
 $string['course'] = 'Course';
@@ -43,8 +68,10 @@ $string['date'] = 'Date';
 $string['dateformat'] = 'yyyy-mm-dd';
 $string['daterange'] = '{$a->start} to {$a->end}';
 $string['dates'] = 'Dates';
+$string['days'] = 'Days';
+$string['daytitle'] = 'Title';
 $string['deleteplan'] = 'Delete plan';
-$string['deleteplanconfirm'] = 'Delete the plan {$a} and its timetable? This cannot be undone.';
+$string['deleteplanconfirm'] = 'Delete the plan {$a} with its timetable, its days and its imports? This cannot be undone.';
 $string['deleteschoolyear'] = 'Delete school year';
 $string['deleteschoolyearconfirm'] = 'Delete the school year {$a} with its holidays and evaluation periods? This cannot be undone.';
 $string['deleteschoolyearhasplans'] = 'The school year {$a} has plans. Delete its plans before you delete the school year.';
@@ -53,6 +80,7 @@ $string['editschoolyear'] = 'Edit school year';
 $string['enddate'] = 'Last day';
 $string['error_baddate'] = 'Enter an existing date written yyyy-mm-dd, such as 2026-09-14.';
 $string['error_changedelsewhere'] = 'This was changed elsewhere; reload to see the latest version';
+$string['error_confirmwarnings'] = 'Confirm that you have read the warnings.';
 $string['error_course'] = 'Choose a course where you teach.';
 $string['error_dateoutsideyear'] = 'The date must lie within the school year.';
 $string['error_daterange'] = 'Enter a date from 2000-01-01 to 2099-12-31.';
@@ -66,9 +94,14 @@ $string['error_modulecode'] = 'The module code can have up to 100 characters.';
 $string['error_moduletitle'] = 'Enter the module title, up to 255 characters.';
 $string['error_name'] = 'Enter a name of up to 255 characters.';
 $string['error_notfound'] = 'That item does not exist, or you do not have permission to see it.';
+$string['error_notimported'] = 'Import the plan text before you approve the plan.';
+$string['error_planhaserrors'] = 'The plan text has errors. Correct them; nothing has been saved.';
+$string['error_planlocked'] = 'This plan is approved and can no longer be changed.';
+$string['error_plantoolarge'] = 'The plan text is larger than {$a} KB, the most a plan can have.';
 $string['error_schoolyearhasplans'] = 'This school year has plans. Delete its plans first.';
 $string['error_toomanyevaluations'] = 'A school year can have up to 20 evaluation periods.';
 $string['error_weekday'] = 'The timetable has a day that is not a weekday.';
+$string['error_yearexcludesplans'] = 'Plans of this school year have class days outside these dates. The school year must include them.';
 $string['error_yeartoolong'] = 'A school year can be at most 400 days long.';
 $string['evaluation'] = 'Evaluation period {no}';
 $string['evaluationname'] = 'Name';
@@ -93,22 +126,64 @@ $string['holidayline'] = 'Line {$a->line} ({$a->text}): {$a->reason}';
 $string['holidays'] = 'Holidays and non-teaching days';
 $string['holidays_help'] = 'One per line: a date or a period, then an optional label. Dates are written 2026-12-08 or 08/12/2026; a period is two dates joined by "to", "a", "-", "–", "—", ".." or "→", as in "2026-12-22 to 2027-01-07 Christmas". Blank lines and lines starting with # are ignored. The holidays apply to every plan of this school year.';
 $string['hours'] = 'Hours';
+$string['importplan'] = 'Import plan text';
+$string['importplanintro'] = 'Paste the text of the plan below, or upload it as a Markdown (.md) or text file, then press Preview. Nothing is saved until you press Save draft after the preview.';
+$string['issue_bad_date'] = 'The day heading "{$a->text}" has no date that can be read. Write the date as 2026-09-16 or 16/09/2026, optionally after a weekday such as dl or Mon.';
+$string['issue_block_too_long'] = 'The RA or block heading above this day is longer than {$a->max} characters.';
+$string['issue_empty_day'] = 'The day {$a->date} has no plan text.';
+$string['issue_missing_hours'] = 'The day {$a->date} has no hours, and the timetable has none for that weekday.';
+$string['issue_module_too_long'] = 'The module heading is too long: the code can have up to 100 characters and the title up to 255.';
+$string['issue_multiple_modules'] = 'A second # module heading. A plan holds one module: remove this heading or import the module separately.';
+$string['issue_no_block'] = 'The day {$a->date} has no ## RA or block heading above it.';
+$string['issue_no_class_weekday'] = 'The day {$a->date} falls on a weekday with no class in the timetable.';
+$string['issue_no_days'] = 'The plan has no days. Write each class day as a ### heading that starts with its date.';
+$string['issue_no_module_heading'] = 'The plan has no # module heading, so the module code and title of this plan stay as they are.';
+$string['issue_not_utf8'] = 'The text is not UTF-8 text. Save the file as UTF-8 and try again.';
+$string['issue_on_holiday'] = 'The day {$a->date} is a holiday: {$a->holiday}.';
+$string['issue_out_of_order'] = 'The day {$a->date} comes after {$a->previous} in the text, but it is earlier.';
+$string['issue_out_of_range'] = 'The date {$a->date} is not between 2000-01-01 and 2099-12-31.';
+$string['issue_outside_year'] = 'The day {$a->date} is outside the school year.';
+$string['issue_title_too_long'] = 'The title of the day {$a->date} is longer than {$a->max} characters.';
+$string['issue_too_many_days'] = 'The plan has more than {$a->max} days, the most a plan can have. This is the first day over the limit.';
+$string['issue_too_many_hours'] = 'The day {$a->date} has {$a->hours} hours; a day can have at most 24.';
+$string['issue_unclosed_fence'] = 'A code block opens here and is never closed, so it may hide the days after it.';
+$string['issue_weekday_mismatch'] = 'The weekday "{$a->weekday}" is not the weekday of {$a->date}.';
+$string['issueline'] = 'Line {$a->line}: {$a->message}';
 $string['lastclassday'] = 'Last class day';
+$string['maxplandays'] = 'Most days in a plan';
+$string['maxplandays_desc'] = 'A plan text with more days than this is refused.';
+$string['maxplansize'] = 'Largest plan text (KB)';
+$string['maxplansize_desc'] = 'A pasted or uploaded plan text larger than this, in kilobytes, is refused.';
+$string['module'] = 'Module';
 $string['modulecode'] = 'Module code';
 $string['moduletitle'] = 'Module title';
 $string['month'] = 'Month';
+$string['noblock'] = '(no RA or block)';
 $string['nocourse'] = 'No course';
 $string['noholidays'] = 'This school year has no holidays.';
+$string['noitems'] = 'This plan has no days yet. Import its text to add them.';
 $string['noplans'] = 'No plans in this school year yet.';
 $string['noschoolyearforplan'] = 'A plan belongs to a school year. Create a school year first.';
 $string['noschoolyears'] = 'You have no school years yet. A school year holds the dates, holidays and evaluation periods shared by all your plans of that year.';
 $string['plan'] = 'Plan';
+$string['planapproved'] = 'Plan approved.';
 $string['plandeleted'] = 'Plan deleted.';
+$string['plandraftsaved'] = 'Draft saved. Check its days, then approve the plan.';
+$string['planfile'] = 'Or upload a file';
+$string['planfile_help'] = 'A Markdown (.md) or text (.txt) file, saved as UTF-8. It is read in place of the text box and is not kept.';
 $string['planname'] = '{$a->code} · {$a->title}';
+$string['plannedcontent'] = 'Planned content';
 $string['plansaved'] = 'Plan saved.';
 $string['plansnoschoolyear'] = 'Plans without a school year';
 $string['plansnoschoolyearintro'] = 'The school year of these plans no longer exists. Open a plan to choose another school year for it, or delete it.';
+$string['plantext'] = 'Plan text';
 $string['pluginname'] = 'Class progress';
+$string['preview'] = 'Preview of the plan text';
+$string['previewclean'] = 'No errors or warnings.';
+$string['previewerrors'] = 'Errors: the plan cannot be saved until they are corrected.';
+$string['previewplan'] = 'Preview';
+$string['previewreplaces'] = 'The module heading of the text replaces the module typed for this plan ({$a}).';
+$string['previewwarnings'] = 'Warnings: read them; you will be asked to confirm them when you approve the plan.';
 $string['privacy:metadata:local_classprogress_entry'] = 'What actually happened in a session, written by the teacher. The text may name students.';
 $string['privacy:metadata:local_classprogress_entry:carry'] = 'Whether unfinished content is carried over to a later session.';
 $string['privacy:metadata:local_classprogress_entry:content'] = 'What was done in the session, written by the teacher; it may name students.';
@@ -189,6 +264,8 @@ $string['privacy:metadata:local_classprogress_slot:timemodified'] = 'When the ti
 $string['privacy:metadata:local_classprogress_slot:weekday'] = 'The day of the week.';
 $string['privacy:path:plan'] = 'Plan {$a}';
 $string['privacy:path:schoolyear'] = 'School year {$a}';
+$string['readwarnings'] = 'I have read the warnings';
+$string['savedraft'] = 'Save draft';
 $string['schoolyear'] = 'School year';
 $string['schoolyearcounts'] = 'Holidays: {$a->holidays}. Evaluation periods: {$a->evaluations}.';
 $string['schoolyeardeleted'] = 'School year deleted.';
@@ -199,6 +276,11 @@ $string['sessionslost'] = 'Sessions lost to holidays';
 $string['sessionslostcolumn'] = 'Sessions lost';
 $string['sessionspermonth'] = 'Sessions per month';
 $string['startdate'] = 'First day';
+$string['status'] = 'Status';
+$string['statusapproved'] = 'Approved on {$a}. The plan is locked: its days, dates, hours, text and timetable can no longer be changed.';
+$string['statusapprovedshort'] = 'Approved';
+$string['statusdraft'] = 'Draft: the plan can still be changed, imported again or deleted.';
+$string['statusdraftshort'] = 'Draft';
 $string['summaryhours'] = '{$a} hours of class';
 $string['summaryhoursone'] = '{$a} hour of class';
 $string['summarysessions'] = '{$a} sessions';

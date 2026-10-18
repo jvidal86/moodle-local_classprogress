@@ -15,7 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Create, edit or delete a draft plan shell and its weekly timetable, and see its calendar.
+ * Create, edit or delete a draft plan shell and its weekly timetable, approve it, and see its days and its calendar.
+ *
+ * An approved plan is shown read-only: no edit form, no import, no delete.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -23,11 +25,15 @@
  */
 
 use core\output\notification;
+use local_classprogress\form\approve_form;
 use local_classprogress\form\plan_form;
+use local_classprogress\local\plan_issue;
 use local_classprogress\local\plan_service;
 use local_classprogress\local\schoolyear_service;
 use local_classprogress\output\calendar_view;
 use local_classprogress\output\index_page;
+use local_classprogress\output\plan_preview;
+use local_classprogress\output\plan_view;
 
 require_once(__DIR__ . '/../../config.php');
 
@@ -50,6 +56,50 @@ $PAGE->navbar->add(get_string('pluginname', 'local_classprogress'), $indexurl);
 
 $plan = $id ? plan_service::get($USER->id, $id) : null;
 $name = $plan ? s(index_page::plan_name($plan)) : '';
+$draft = !$plan || $plan->status === plan_service::STATUS_DRAFT;
+if (!$draft && ($action === 'delete' || $action === 'approve')) {
+    throw new \moodle_exception('error_planlocked', 'local_classprogress', $url);
+}
+
+if ($plan && $action === 'approve') {
+    $title = get_string('approveplan', 'local_classprogress');
+    $result = plan_service::check_stored($USER->id, $id);
+    $approveurl = new \core\url($url, ['action' => 'approve']);
+    $form = new approve_form($approveurl, [
+        'warnings' => plan_service::count_issues($result, plan_issue::WARNING),
+        'seen' => plan_service::fingerprint($result),
+    ]);
+    if ($form->is_cancelled()) {
+        redirect($url);
+    } else if ($data = $form->get_data()) {
+        try {
+            plan_service::approve($USER->id, $id, $data->seen, !empty($data->warningsread));
+        } catch (\moodle_exception $e) {
+            if ($e->errorcode !== 'error_changedelsewhere') {
+                throw $e;
+            }
+            // What was shown is no longer what would be approved: show it again.
+            redirect($approveurl, get_string('error_changedelsewhere', 'local_classprogress'), null, notification::NOTIFY_ERROR);
+        }
+        redirect($url, get_string('planapproved', 'local_classprogress'), null, notification::NOTIFY_SUCCESS);
+    }
+    $form->set_data(['id' => $id]);
+    $PAGE->set_title($title);
+    $PAGE->navbar->add($name, $url);
+    $PAGE->navbar->add($title);
+    echo $OUTPUT->header();
+    echo $OUTPUT->heading($title . ': ' . $name);
+    echo html_writer::tag('p', get_string('approveplanintro', 'local_classprogress'));
+    echo $OUTPUT->render(new plan_preview($plan, $result, true));
+    if (plan_service::count_issues($result, plan_issue::ERROR)) {
+        echo $OUTPUT->notification(get_string('approveplannoerrors', 'local_classprogress'), notification::NOTIFY_ERROR, false);
+        echo $OUTPUT->continue_button($url);
+    } else {
+        $form->display();
+    }
+    echo $OUTPUT->footer();
+    exit;
+}
 
 if ($plan && $action === 'delete') {
     $title = get_string('deleteplan', 'local_classprogress');
@@ -70,6 +120,16 @@ if ($plan && $action === 'delete') {
 $title = $plan ? $name : get_string('addplan', 'local_classprogress');
 $PAGE->set_title($title);
 $PAGE->navbar->add($title);
+
+if (!$draft) {
+    echo $OUTPUT->header();
+    echo $OUTPUT->heading($title);
+    echo $OUTPUT->render(plan_view::for_plan($USER->id, $plan));
+    echo $OUTPUT->heading(get_string('calendar', 'local_classprogress'), 3);
+    echo $OUTPUT->render(calendar_view::for_plan($USER->id, $plan));
+    echo $OUTPUT->footer();
+    exit;
+}
 
 $years = [];
 foreach (schoolyear_service::list($USER->id) as $year) {
@@ -134,6 +194,25 @@ if ($stale) {
     echo $OUTPUT->notification(get_string('error_changedelsewhere', 'local_classprogress'), notification::NOTIFY_ERROR);
 }
 if ($plan) {
+    $actions = [html_writer::link(
+        new \core\url('/local/classprogress/import.php', ['id' => $id]),
+        get_string('importplan', 'local_classprogress'),
+        ['class' => 'btn btn-secondary']
+    )];
+    if ($plan->sourcetext !== null) {
+        $actions[] = html_writer::link(
+            new \core\url($url, ['action' => 'approve']),
+            get_string('approveplan', 'local_classprogress'),
+            ['class' => 'btn btn-primary']
+        );
+    }
+    $actions[] = html_writer::link(
+        new \core\url($url, ['action' => 'delete']),
+        get_string('deleteplan', 'local_classprogress'),
+        ['class' => 'btn btn-link']
+    );
+    echo html_writer::tag('p', implode(' ', $actions), ['data-region' => 'plan-actions']);
+    echo $OUTPUT->render(plan_view::for_plan($USER->id, $plan));
     echo $OUTPUT->heading(get_string('calendar', 'local_classprogress'), 3);
     echo $OUTPUT->render(calendar_view::for_plan($USER->id, $plan));
     echo $OUTPUT->heading(get_string('editplan', 'local_classprogress'), 3);

@@ -16,8 +16,12 @@
 
 namespace local_classprogress\local;
 
+use local_classprogress\event\plan_approved;
+use local_classprogress\event\plan_imported;
+
 /**
- * A teacher's plans: the draft shell of each plan (module, dates, optional course, weekly timetable) and its calendar.
+ * A teacher's plans: the shell of each plan (module, dates, optional course, weekly timetable), its calendar, the
+ * import of its Markdown text into a draft, and its approval.
  *
  * Every method first checks, live, that the acting user may use the plugin (access::qualifies()), and then reaches only
  * that user's rows: a missing id and another user's id give the same exception, error_notfound, and a list of ids is
@@ -30,13 +34,64 @@ namespace local_classprogress\local;
  * timetable leaves it as it is, and data with timemodified, the version the change was made from, is refused when the
  * stored plan is newer. The dates, when given, lie within the plan's school year. Creating a plan or moving it into a
  * school year holds that school year's lock (schoolyear_service::lock()), so the school year cannot be deleted at the
- * same moment. Importing the plan text and approving it come in a later phase; until then every plan is a draft.
+ * same moment.
+ *
+ * Import (check(), import()): the text is read by plan_parser with the holidays of the plan's school year, the plan's
+ * timetable (none when it has no slots, so class days are not checked) and the school year's dates. To the parser's
+ * issues come errors for what could not be stored (the codes below), so they show in the preview instead of failing the
+ * save. A text with any error is not saved. Saving replaces the draft's text and items and adds a row to the import
+ * log; the # heading's code and title replace the typed ones, each where the heading gives it (imported_module()).
+ * Line ends are stored as line feeds. A draft's items follow a later timetable change where the text gives no hours.
+ *
+ * Approval (check_stored(), approve()) reads the stored text again, now, and goes ahead only if it has no errors, is
+ * what the teacher saw (fingerprint()), and its warnings were confirmed. It is final: an approved plan refuses every
+ * change through this class (error_planlocked), so its items, dates and hours never move. Import and approval hold the
+ * plan's lock and its school year's lock, run in one delegated transaction, and trigger their event after it commits.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class plan_service {
+    /** @var string Status of a plan that can still change. */
+    public const STATUS_DRAFT = 'draft';
+
+    /** @var string Status of an approved plan, locked for good. */
+    public const STATUS_APPROVED = 'approved';
+
+    /** @var string Import source: text pasted into the form. */
+    public const SOURCE_PASTE = 'paste';
+
+    /** @var string Import source: an uploaded file, read and not stored. */
+    public const SOURCE_UPLOAD = 'upload';
+
+    /** @var int Largest plan text by default, in KB (admin setting maxplansize). */
+    public const DEFAULT_MAX_SIZE = 200;
+
+    /** @var int Most days in a plan by default (admin setting maxplandays). */
+    public const DEFAULT_MAX_DAYS = 400;
+
+    /** @var string Error added to the parser's: the text has no day. No parameters. */
+    public const NO_DAYS = 'no_days';
+
+    /** @var string Error: more days than max_days(), at the first day over the limit. Parameter: max. */
+    public const TOO_MANY_DAYS = 'too_many_days';
+
+    /** @var string Error: the module code is longer than MAX_CODE or the title than MAX_TITLE. No parameters. */
+    public const MODULE_TOO_LONG = 'module_too_long';
+
+    /** @var string Error: the block above a day is longer than MAX_TITLE, at its first day. Parameter: max. */
+    public const BLOCK_TOO_LONG = 'block_too_long';
+
+    /** @var string Error: a day title longer than MAX_TITLE. Parameters: date, max. */
+    public const TITLE_TOO_LONG = 'title_too_long';
+
+    /** @var string Error: a day with more than MAX_HOURS hours. Parameters: date, hours. */
+    public const TOO_MANY_HOURS = 'too_many_hours';
+
+    /** @var string Error: a day outside dates::FIRST_DAY to dates::LAST_DAY. Parameter: date. */
+    public const OUT_OF_RANGE = 'out_of_range';
+
     /** @var int Longest module code, in characters. */
     public const MAX_CODE = 100;
 
@@ -51,6 +106,12 @@ final class plan_service {
 
     /** @var string Timetable slot table. */
     private const SLOT = 'local_classprogress_slot';
+
+    /** @var string Plan item table: one row per day of the plan text. */
+    private const PLANITEM = 'local_classprogress_planitem';
+
+    /** @var string Import log table. */
+    private const IMPORT = 'local_classprogress_import';
 
     /** @var string[] Tables of the rows that belong to a plan through their planid, deleted with it. */
     private const CHILDREN = [
@@ -81,7 +142,7 @@ final class plan_service {
                 $now = time();
                 $id = (int) $DB->insert_record(self::PLAN, (object) (self::fields($data) + [
                     'userid' => $userid,
-                    'status' => 'draft',
+                    'status' => self::STATUS_DRAFT,
                     'sourcetext' => null,
                     'timeapproved' => 0,
                     'timecreated' => $now,
@@ -96,58 +157,267 @@ final class plan_service {
     }
 
     /**
-     * Changes a plan's shell; a timetable given in the data replaces the stored one.
+     * Changes a draft plan's shell; a timetable given in the data replaces the stored one.
      *
-     * The change holds the lock of the plan's school year, and its timemodified is always later than the one it
-     * replaces. A course link equal to the stored one is kept even if the user can no longer link that course.
+     * The change holds the plan's lock and the lock of its (new) school year, and its timemodified is always later than
+     * the one it replaces. A course link equal to the stored one is kept even if the user can no longer link that
+     * course. When the timetable changes, the items of an imported draft take their hours from it where the text gives
+     * none.
      *
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @param \stdClass $data Plan data (see the class description).
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound, error_changedelsewhere, the first error of validate(), or locktimeout.
+     * @throws \moodle_exception error_notfound, error_planlocked, error_changedelsewhere, the first error of validate(), or
+     *     locktimeout.
      */
     public static function update(int $userid, int $id, \stdClass $data): void {
         global $DB;
 
         self::require_access($userid);
         self::own($userid, $id);
-        $lock = schoolyear_service::lock((int) ($data->schoolyearid ?? 0));
-        try {
-            $plan = self::own($userid, $id);
+        $work = function (\stdClass $plan) use ($DB, $userid, $id, $data): void {
+            self::require_draft($plan);
             if (!empty($data->timemodified) && (int) $data->timemodified !== (int) $plan->timemodified) {
                 throw new \moodle_exception('error_changedelsewhere', 'local_classprogress');
             }
             self::require_valid($userid, $data, $plan);
             $now = max(time(), (int) $plan->timemodified + 1);
-            self::in_transaction(function () use ($DB, $id, $data, $now): void {
+            self::in_transaction(function () use ($DB, $id, $data, $now, $plan): void {
                 $DB->update_record(self::PLAN, (object) (self::fields($data) + ['id' => $id, 'timemodified' => $now]));
-                self::write_timetable($id, $data, $now);
+                if (self::write_timetable($id, $data, $now) && $plan->sourcetext !== null) {
+                    $timetable = self::timetables([$id])[$id];
+                    self::write_items($id, (new plan_parser())->parse($plan->sourcetext, null, $timetable ?: null)->days, $now);
+                }
             });
-        } finally {
-            $lock->release();
-        }
+        };
+        self::locked($userid, $id, (int) ($data->schoolyearid ?? 0), $work);
     }
 
     /**
-     * Deletes a plan with every row that hangs from it: timetable, items, import log, entries and their history.
+     * Deletes a draft plan with every row that hangs from it: timetable, items, import log, entries and their history.
      *
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @throws \required_capability_exception When the user may not use the plugin.
-     * @throws \moodle_exception error_notfound.
+     * @throws \moodle_exception error_notfound, error_planlocked, or locktimeout.
      */
     public static function delete(int $userid, int $id): void {
         global $DB;
 
         self::require_access($userid);
         self::own($userid, $id);
-        self::in_transaction(function () use ($DB, $id): void {
-            foreach (self::CHILDREN as $table) {
-                $DB->delete_records($table, ['planid' => $id]);
-            }
-            $DB->delete_records(self::PLAN, ['id' => $id]);
+        self::locked($userid, $id, null, function (\stdClass $plan) use ($DB, $id): void {
+            self::require_draft($plan);
+            self::in_transaction(function () use ($DB, $id): void {
+                foreach (self::CHILDREN as $table) {
+                    $DB->delete_records($table, ['planid' => $id]);
+                }
+                $DB->delete_records(self::PLAN, ['id' => $id]);
+            });
         });
+    }
+
+    /**
+     * Reads a plan text for a draft plan as import() would, and saves nothing.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @param string $text The plan text, as pasted or uploaded.
+     * @return plan_result What the text gives, with the errors for what could not be stored.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound, error_planlocked, or error_plantoolarge (with the limit in KB).
+     */
+    public static function check(int $userid, int $id, string $text): plan_result {
+        self::require_access($userid);
+        $plan = self::own($userid, $id);
+        self::require_draft($plan);
+        return self::read($userid, $plan, self::normalise($text));
+    }
+
+    /**
+     * Saves a plan text as the content of a draft plan: its text, one item per day and a row of the import log, replacing
+     * any earlier content; the # heading's code and title replace the plan's (imported_module()).
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @param string $text The plan text, as pasted or uploaded.
+     * @param string $source self::SOURCE_PASTE or self::SOURCE_UPLOAD.
+     * @param string $filename Name of the uploaded file; empty for pasted text.
+     * @return int Id of the import log row.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound, error_planlocked, error_plantoolarge, error_planhaserrors when check()
+     *     gives an error, or locktimeout.
+     */
+    public static function import(
+        int $userid,
+        int $id,
+        string $text,
+        string $source = self::SOURCE_PASTE,
+        string $filename = ''
+    ): int {
+        self::require_access($userid);
+        self::own($userid, $id);
+        if ($source !== self::SOURCE_PASTE && $source !== self::SOURCE_UPLOAD) {
+            throw new \coding_exception("Unknown import source '{$source}'.");
+        }
+        $text = self::normalise($text);
+        $log = ['source' => $source, 'filename' => \core_text::substr($filename, 0, 255), 'contenthash' => sha1($text)];
+        $work = function (\stdClass $plan) use ($userid, $text, $log): array {
+            self::require_draft($plan);
+            $result = self::read($userid, $plan, $text);
+            if (self::count_issues($result, plan_issue::ERROR)) {
+                throw new \moodle_exception('error_planhaserrors', 'local_classprogress');
+            }
+            $importid = self::in_transaction(fn(): int => self::write_content($plan, $text, $result, $log));
+            return [$importid, (int) $plan->schoolyearid];
+        };
+        [$importid, $yearid] = self::locked($userid, $id, null, $work);
+
+        plan_imported::create([
+            'objectid' => $id,
+            'userid' => $userid,
+            'context' => \context_user::instance($userid),
+            'other' => ['schoolyearid' => $yearid, 'importid' => $importid],
+        ])->trigger();
+        return $importid;
+    }
+
+    /**
+     * Reads the stored text of a plan again, now, with the current holidays, timetable and school year: what approval
+     * checks.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @return plan_result What the stored text gives now.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound, error_notimported, or error_plantoolarge when the limit was lowered.
+     */
+    public static function check_stored(int $userid, int $id): plan_result {
+        self::require_access($userid);
+        $plan = self::own($userid, $id);
+        if ($plan->sourcetext === null) {
+            throw new \moodle_exception('error_notimported', 'local_classprogress');
+        }
+        return self::read($userid, $plan, $plan->sourcetext);
+    }
+
+    /**
+     * Approves a draft plan, for good: it then refuses every change.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @param string $seen fingerprint() of the check_stored() result the teacher was shown.
+     * @param bool $warningsread Whether the teacher confirmed that they read the warnings.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound, error_planlocked, error_notimported, error_planhaserrors,
+     *     error_changedelsewhere when the stored text now gives something else than what was seen, error_confirmwarnings,
+     *     error_plantoolarge, or locktimeout.
+     */
+    public static function approve(int $userid, int $id, string $seen, bool $warningsread): void {
+        global $DB;
+
+        self::require_access($userid);
+        self::own($userid, $id);
+        $yearid = self::locked($userid, $id, null, function (\stdClass $plan) use ($DB, $userid, $id, $seen, $warningsread): int {
+            self::require_draft($plan);
+            if ($plan->sourcetext === null) {
+                throw new \moodle_exception('error_notimported', 'local_classprogress');
+            }
+            $result = self::read($userid, $plan, $plan->sourcetext);
+            if (self::count_issues($result, plan_issue::ERROR)) {
+                throw new \moodle_exception('error_planhaserrors', 'local_classprogress');
+            }
+            if (!hash_equals(self::fingerprint($result), $seen)) {
+                throw new \moodle_exception('error_changedelsewhere', 'local_classprogress');
+            }
+            if (self::count_issues($result, plan_issue::WARNING) && !$warningsread) {
+                throw new \moodle_exception('error_confirmwarnings', 'local_classprogress');
+            }
+            $now = max(time(), (int) $plan->timemodified + 1);
+            self::in_transaction(fn() => $DB->update_record(self::PLAN, (object) ['id' => $id,
+                'status' => self::STATUS_APPROVED, 'timeapproved' => $now, 'timemodified' => $now]));
+            return (int) $plan->schoolyearid;
+        });
+
+        plan_approved::create([
+            'objectid' => $id,
+            'userid' => $userid,
+            'context' => \context_user::instance($userid),
+            'other' => ['schoolyearid' => $yearid],
+        ])->trigger();
+    }
+
+    /**
+     * Returns the items of a plan: one per day of its text.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id.
+     * @return \stdClass[] Plan item rows keyed by id, in the order of the text.
+     * @throws \required_capability_exception When the user may not use the plugin.
+     * @throws \moodle_exception error_notfound.
+     */
+    public static function items(int $userid, int $id): array {
+        global $DB;
+
+        self::require_access($userid);
+        self::own($userid, $id);
+        return $DB->get_records(self::PLANITEM, ['planid' => $id], 'sortorder, id');
+    }
+
+    /**
+     * Identifies what a reading of a plan gives, so that approval can tell whether it is still what the teacher saw.
+     *
+     * @param plan_result $result A result of check() or check_stored().
+     * @return string A SHA-1 of the module, blocks, days and issues.
+     */
+    public static function fingerprint(plan_result $result): string {
+        return sha1(json_encode($result, JSON_PARTIAL_OUTPUT_ON_ERROR));
+    }
+
+    /**
+     * Counts the issues of one level.
+     *
+     * @param plan_result $result A result of check() or check_stored().
+     * @param string $level plan_issue::ERROR or plan_issue::WARNING.
+     * @return int The number of issues of that level.
+     */
+    public static function count_issues(plan_result $result, string $level): int {
+        return count(array_filter($result->issues, fn(plan_issue $issue): bool => $issue->level === $level));
+    }
+
+    /**
+     * The module code and title that importing a text stores: those of its # heading where it gives them, else the
+     * plan's own.
+     *
+     * @param \stdClass $plan The plan row.
+     * @param plan_result $result What the text gives.
+     * @return string[] [code, title].
+     */
+    public static function imported_module(\stdClass $plan, plan_result $result): array {
+        $code = $result->module?->code ?? '';
+        $title = $result->module?->title ?? '';
+        return [$code !== '' ? $code : $plan->modulecode, $title !== '' ? $title : $plan->moduletitle];
+    }
+
+    /**
+     * The largest plan text, from the admin setting maxplansize.
+     *
+     * @return int Bytes.
+     */
+    public static function max_size(): int {
+        $kb = (int) get_config('local_classprogress', 'maxplansize');
+        return ($kb > 0 ? $kb : self::DEFAULT_MAX_SIZE) * 1024;
+    }
+
+    /**
+     * The most days a plan can have, from the admin setting maxplandays.
+     *
+     * @return int Days.
+     */
+    public static function max_days(): int {
+        $days = (int) get_config('local_classprogress', 'maxplandays');
+        return $days > 0 ? $days : self::DEFAULT_MAX_DAYS;
     }
 
     /**
@@ -379,6 +649,135 @@ final class plan_service {
     }
 
     /**
+     * Refuses a change to a plan that is not a draft.
+     *
+     * @param \stdClass $plan The plan row.
+     * @throws \moodle_exception error_planlocked.
+     */
+    private static function require_draft(\stdClass $plan): void {
+        if ($plan->status !== self::STATUS_DRAFT) {
+            throw new \moodle_exception('error_planlocked', 'local_classprogress');
+        }
+    }
+
+    /**
+     * Runs a change holding the plan's lock and then its school year's lock, with the plan as read under the lock.
+     *
+     * @param int $userid The acting user.
+     * @param int $id Plan id, already checked to be the user's.
+     * @param int|null $yearid School year whose lock to hold; null for the plan's own.
+     * @param callable $work The change; it gets the plan row, and what it returns is returned.
+     * @return mixed What the change returns.
+     * @throws \moodle_exception error_notfound when the plan went in the meantime, or locktimeout.
+     */
+    private static function locked(int $userid, int $id, ?int $yearid, callable $work): mixed {
+        $factory = \core\lock\lock_config::get_lock_factory('local_classprogress');
+        $planlock = $factory->get_lock('plan-' . $id, schoolyear_service::LOCK_TIMEOUT);
+        if (!$planlock) {
+            throw new \moodle_exception('locktimeout');
+        }
+        try {
+            $plan = self::own($userid, $id);
+            $yearlock = schoolyear_service::lock($yearid ?? (int) $plan->schoolyearid);
+            try {
+                return $work($plan);
+            } finally {
+                $yearlock->release();
+            }
+        } finally {
+            $planlock->release();
+        }
+    }
+
+    /**
+     * Reads a plan text for a plan, with the errors for what could not be stored.
+     *
+     * @param int $userid The acting user, already checked to qualify and to own the plan.
+     * @param \stdClass $plan The plan row.
+     * @param string $text The text, with normalised line ends.
+     * @return plan_result What the text gives.
+     * @throws \moodle_exception error_plantoolarge, with the limit in KB.
+     */
+    private static function read(int $userid, \stdClass $plan, string $text): plan_result {
+        global $DB;
+
+        $max = self::max_size();
+        if (strlen($text) > $max) {
+            throw new \moodle_exception('error_plantoolarge', 'local_classprogress', '', intdiv($max, 1024));
+        }
+        $year = $DB->get_record('local_classprogress_schoolyear', ['id' => $plan->schoolyearid, 'userid' => $userid]);
+        $holidays = holiday_parser::expand(self::year_holidays($userid, (int) $plan->schoolyearid));
+        $timetable = self::timetables([(int) $plan->id])[(int) $plan->id];
+        $range = $year ? [$year->startdate, $year->enddate] : null;
+        $result = (new plan_parser())->parse($text, $holidays, $timetable ?: null, $range);
+        return self::with_storage_errors($result);
+    }
+
+    /**
+     * Adds to a reading the errors for what the plan tables cannot hold or the date limits do not allow.
+     *
+     * A text that is not UTF-8 keeps its single error.
+     *
+     * @param plan_result $result What the parser read.
+     * @return plan_result The same, with those errors among the issues, ordered by line.
+     */
+    private static function with_storage_errors(plan_result $result): plan_result {
+        foreach ($result->issues as $issue) {
+            if ($issue->code === plan_issue::NOT_UTF8) {
+                return $result;
+            }
+        }
+        $error = fn(string $code, int $line, array $params = []): plan_issue =>
+            new plan_issue(plan_issue::ERROR, $code, $line, $params);
+        $issues = [];
+        $module = $result->module;
+        $codelength = \core_text::strlen($module?->code ?? '');
+        if ($module && ($codelength > self::MAX_CODE || \core_text::strlen($module->title) > self::MAX_TITLE)) {
+            $issues[] = $error(self::MODULE_TOO_LONG, $module->line);
+        }
+        if (!$result->days) {
+            $issues[] = $error(self::NO_DAYS, 1);
+        }
+        $maxdays = self::max_days();
+        $blocks = [];
+        foreach ($result->days as $index => $day) {
+            if ($index === $maxdays) {
+                $issues[] = $error(self::TOO_MANY_DAYS, $day->line, ['max' => (string) $maxdays]);
+            }
+            if ($day->block !== null && !isset($blocks[$day->block]) && \core_text::strlen($day->block) > self::MAX_TITLE) {
+                $issues[] = $error(self::BLOCK_TOO_LONG, $day->line, ['max' => (string) self::MAX_TITLE]);
+            }
+            $blocks[$day->block ?? ''] = true;
+            if (\core_text::strlen($day->title) > self::MAX_TITLE) {
+                $issues[] = $error(self::TITLE_TOO_LONG, $day->line, ['date' => $day->date, 'max' => (string) self::MAX_TITLE]);
+            }
+            if ($day->hours !== null && $day->hours > self::MAX_HOURS) {
+                $issues[] = $error(self::TOO_MANY_HOURS, $day->line, ['date' => $day->date, 'hours' => (string) $day->hours]);
+            }
+            if (!dates::in_window($day->date)) {
+                $issues[] = $error(self::OUT_OF_RANGE, $day->line, ['date' => $day->date]);
+            }
+        }
+        if (!$issues) {
+            return $result;
+        }
+        $issues = array_merge($result->issues, $issues);
+        // Stable, so the parser's issues on a line come before these.
+        usort($issues, fn(plan_issue $a, plan_issue $b): int => $a->line <=> $b->line);
+        return new plan_result($result->module, $result->blocks, $result->days, $issues);
+    }
+
+    /**
+     * Stores line ends as line feeds and drops null bytes, as Moodle does for posted text.
+     *
+     * @param string $text A plan text.
+     * @return string The same text.
+     */
+    private static function normalise(string $text): string {
+        return str_replace(["\r\n", "\r", "\0"], ["\n", "\n", ''], $text);
+    }
+
+    /**
      * Returns a plan of the user.
      *
      * @param int $userid The acting user.
@@ -468,12 +867,13 @@ final class plan_service {
      * @param int $id Plan id.
      * @param \stdClass $data Valid plan data.
      * @param int $now Time of the change.
+     * @return bool Whether the data gave a timetable.
      */
-    private static function write_timetable(int $id, \stdClass $data, int $now): void {
+    private static function write_timetable(int $id, \stdClass $data, int $now): bool {
         global $DB;
 
         if (!isset($data->timetable)) {
-            return;
+            return false;
         }
         $rows = [];
         foreach ($data->timetable as $weekday => $hours) {
@@ -485,6 +885,58 @@ final class plan_service {
         }
         $DB->delete_records(self::SLOT, ['planid' => $id]);
         $DB->insert_records(self::SLOT, $rows);
+        return true;
+    }
+
+    /**
+     * Writes a checked text as the content of a draft: the plan's module and text, its items and a row of the import log.
+     *
+     * @param \stdClass $plan The plan row, read under its lock.
+     * @param string $text The text, with normalised line ends.
+     * @param plan_result $result What the text gives, without errors.
+     * @param array $log Fields of the import log row: source, filename and contenthash.
+     * @return int Id of the import log row.
+     */
+    private static function write_content(\stdClass $plan, string $text, plan_result $result, array $log): int {
+        global $DB;
+
+        [$code, $title] = self::imported_module($plan, $result);
+        $now = max(time(), (int) $plan->timemodified + 1);
+        $DB->update_record(self::PLAN, (object) ['id' => $plan->id, 'modulecode' => $code, 'moduletitle' => $title,
+            'sourcetext' => $text, 'timemodified' => $now]);
+        self::write_items((int) $plan->id, $result->days, $now);
+        return (int) $DB->insert_record(self::IMPORT, (object) ($log + [
+            'planid' => $plan->id,
+            'daycount' => count($result->days),
+            'timecreated' => $now,
+        ]));
+    }
+
+    /**
+     * Replaces the items of a plan with one per day.
+     *
+     * @param int $id Plan id.
+     * @param plan_day[] $days The days of its text, in order.
+     * @param int $now Time of the change.
+     */
+    private static function write_items(int $id, array $days, int $now): void {
+        global $DB;
+
+        $rows = [];
+        foreach (array_values($days) as $index => $day) {
+            $rows[] = [
+                'planid' => $id,
+                'sortorder' => $index + 1,
+                'sessiondate' => $day->date,
+                'block' => $day->block ?? '',
+                'title' => $day->title,
+                'content' => $day->content,
+                'hours' => $day->hours === null ? null : round($day->hours, 2),
+                'timecreated' => $now,
+            ];
+        }
+        $DB->delete_records(self::PLANITEM, ['planid' => $id]);
+        $DB->insert_records(self::PLANITEM, $rows);
     }
 
     /**

@@ -715,7 +715,9 @@ final class plan_service_test extends \advanced_testcase {
     public static function foreign_access_cases(): array {
         $cases = [];
         foreach (['other teacher', 'admin'] as $actor) {
-            foreach (['get', 'update', 'delete', 'timetable', 'calendar', 'calendars'] as $operation) {
+            $operations = ['get', 'update', 'delete', 'timetable', 'calendar', 'calendars', 'check', 'import', 'check_stored',
+                'approve', 'items'];
+            foreach ($operations as $operation) {
                 $cases["{$actor} {$operation}"] = [$actor, $operation];
             }
         }
@@ -742,6 +744,11 @@ final class plan_service_test extends \advanced_testcase {
             'timetable' => plan_service::timetable($userid, $id),
             'calendar' => plan_service::calendar($userid, $id),
             'calendars' => plan_service::calendars($userid, [$id]),
+            'check' => plan_service::check($userid, $id, "### 2026-09-14\nx\n"),
+            'import' => plan_service::import($userid, $id, "### 2026-09-14\nx\n"),
+            'check_stored' => plan_service::check_stored($userid, $id),
+            'approve' => plan_service::approve($userid, $id, '', true),
+            'items' => plan_service::items($userid, $id),
         };
     }
 
@@ -752,7 +759,7 @@ final class plan_service_test extends \advanced_testcase {
      */
     public static function no_access_cases(): array {
         $operations = ['create', 'update', 'delete', 'get', 'list', 'timetable', 'calendar', 'calendars', 'linkable_courses',
-            'validate'];
+            'validate', 'check', 'import', 'check_stored', 'approve', 'items'];
         $cases = [];
         foreach (['student', 'user without a role'] as $actor) {
             foreach ($operations as $operation) {
