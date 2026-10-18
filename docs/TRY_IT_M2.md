@@ -1,5 +1,7 @@
 # Try it: import, preview, approve and lock (M2)
 
+> **Superseded by [TRY_IT_M3.md](TRY_IT_M3.md):** since M3 a plan lives in the course activity (Add an activity or resource → Class progress), not under a school year in the top-menu page. Kept as the record of the R2 test.
+
 About 15 minutes on the local test site. Everything here is throw-away: nothing touches your lab on port 8080 or any real course.
 
 **Site:** http://localhost:8000 (Moodle 4.5) · **Login:** `admin` / `test` · Site administrators can use the plugin for themselves (decided in M1).

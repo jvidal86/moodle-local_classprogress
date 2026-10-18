@@ -83,15 +83,17 @@ Executable parts of the spec today: `tools/check_plan.py` (the parser grammar), 
 
 Policy: few, user-level, readable. Created with generators (`the following "course enrolments" exist`, plus the plugin's own generator), started with `I am on the "..." page logged in as "teacher1"` (the dashboard login is slow), no fixed waits, no `@javascript` unless a step truly needs it.
 
+J1 to J3 live in this repository (`tests/behat`), J4 to J7 in `moodle-mod_classprogress` (`tests/behat/activity.feature`, `log.feature`); the activity also has two scenarios outside the J list (adding the activity, MOD-001; students, MOD-002).
+
 | # | Scenario | Phase | Requirements |
 |---|---|---|---|
 | J1 | A teacher sees the "Class progress" link; a student and a guest do not | M1 | ACC-001, ACC-002 |
 | J2 | A teacher creates a school year, pastes holidays (one bad line is reported) and sets a timetable; the session count is shown | M1 | HOL-001, HOL-002, CAL-001, CAL-002 |
-| J3 | Another teacher opens the first teacher's plan URL and gets the same "not found or no permission" error as for a missing plan | M1 | OWN-001, OWN-002 |
-| J4 | Importing a plan with a bad date shows the error with its line and offers no approval | M2 | PLN-005, IMP-002, IMP-004 |
-| J5 | Importing a clean plan, reading the preview, approving (with confirmation of warnings) and finding the plan read-only afterwards | M2 | IMP-003, IMP-004, LCK-001, LCK-002 |
-| J6 | Logging a session on the day, then backfilling an old one: the second shows the late flag | M3 | to be specified |
-| J7 | Editing an entry keeps the earlier version in the history; deleting it keeps the history | M3 | to be specified |
+| J3 | Another teacher cannot see or open a teacher's school year; a teacher outside the course gets the same "not found" error for a plan activity (PHPUnit) | M1, M3 | OWN-001, OWN-002 |
+| J4 | Importing a plan with a bad date shows the error with its line and offers no approval (activity) | M2, M3 | PLN-005, IMP-002, IMP-004 |
+| J5 | Importing a clean plan, reading the preview, another teacher of the course approving (with confirmation of warnings) and finding the plan read-only afterwards (activity) | M2, M3 | IMP-003, IMP-004, LCK-001, LCK-002, MOD-003, MOD-004 |
+| J6 | Logging a session on the day, then backfilling an old one: the second shows the late flag (activity) | M3 | LOG-001 to 004, LOG-006, LOG-007 |
+| J7 | Editing an entry keeps the earlier version in the history; deleting it keeps the history (activity) | M3 | LOG-005, HIS-001, HIS-002 |
 | J8 | The export page offers the file and shows the same totals as the log (the file's cells are checked in PHPUnit) | M4 | to be specified |
 
 At R5, J1 to J8 run as one full teacher journey on both stacks.

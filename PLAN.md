@@ -134,6 +134,8 @@ The overview in the local plugin reads the activities through a small class of t
 
 **Order of work (M3):** (1) merge the date-picker fix; (2) one agent creates the mod plugin, moves plans, import and approval into it with their tests, adds capabilities, the overview, privacy, events, backup/restore and reset, and reaches today's behaviour inside the activity; (3) the daily log (LOG, HIS) is built inside the activity from the paused M3 work; (4) review round R3; (5) the teacher logs real days.
 
+**Done (2026-10-18):** steps 1 to 3 were built together on branch `m3/split` (local) and in the new repository (mod main, five commits grouped by step, so the intermediate commits are not individually green). Local version 2026101806 drops the moved tables; mod version 2026101801 requires it. Decisions taken while building: admins and managers reach every plan through the activity capabilities; a school year in use may be deleted (approved plans hold their own copies, drafts fall back to no school year); entries hold no user id, authorship is in history rows, the import's userid and approvedby, which erasure sets to 0; restore sets schoolyearid and unmapped users to 0; the activity name uses core cleaning (PARAM_TEXT) while plan text and entries stay as typed; co-teachers see the year owner's holiday labels but never the year's name. Open: the activity form's stale-save check is tested at service level only.
+
 ## 4. Plan import (Markdown: module, RA or block, day)
 
 The plan is plain Markdown that a person or an AI assistant can write and edit anywhere, then paste into the plugin. Three heading levels:
