@@ -56,7 +56,7 @@ final class plan_parser {
     private const HEADING = '/^(#{1,6})[ \t]++/u';
 
     /** @var string A line that opens or closes a code fence, of either kind. */
-    private const FENCE = '/^[' . self::SPACE . ']*+(?:```|~~~)/u';
+    private const FENCE = '/^[' . self::SPACE . ']*+(?:\x60{3}|~{3})/u';
 
     /** @var string Separator between module code and title: ' · ', ' — ', ' – ', ' - ' (any spaces) or ': '. */
     private const SEPARATOR = '/(?<![' . self::SPACE . '])[' . self::SPACE . ']++[\x{b7}\x{2014}\x{2013}-][' . self::SPACE . ']++'
@@ -279,8 +279,8 @@ final class plan_parser {
     private static function school_year(array $year): array {
         $dates = array_values($year);
         foreach ($dates as $date) {
-            if (!is_string($date) || self::find(self::ISO_DATE, $date) === null
-                    || !checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))) {
+            $iso = is_string($date) && self::find(self::ISO_DATE, $date) !== null;
+            if (!$iso || !checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))) {
                 $dates = [];
             }
         }

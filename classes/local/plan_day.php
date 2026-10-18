@@ -35,11 +35,17 @@ final class plan_day {
      * @param string $content The day's plan as Markdown, trimmed; may be empty.
      */
     public function __construct(
+        /** @var string Date, yyyy-mm-dd. */
         public readonly string $date,
+        /** @var float|null Hours from the heading or else the timetable; null when neither gives them. */
         public readonly ?float $hours,
+        /** @var string Title after the date and hours; may be empty. */
         public readonly string $title,
+        /** @var string|null Text of the ## heading above the day, or null when there is none. */
         public readonly ?string $block,
+        /** @var int Line of the heading, from 1. */
         public readonly int $line,
+        /** @var string The day's plan as Markdown, trimmed; may be empty. */
         public readonly string $content,
     ) {
     }

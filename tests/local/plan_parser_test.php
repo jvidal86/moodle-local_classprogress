@@ -39,6 +39,9 @@ final class plan_parser_test extends \basic_testcase {
     /** @var array<int, float> A class every day, two hours, so that only the checks under test give issues. */
     private const EVERY_DAY = [0 => 2.0, 1 => 2.0, 2 => 2.0, 3 => 2.0, 4 => 2.0, 5 => 2.0, 6 => 2.0];
 
+    /** @var string A code fence of backticks, written with escapes because phpcs warns on backticks in strings. */
+    private const BACKTICKS = "\x60\x60\x60";
+
     /**
      * Module headings, with the code and title they give.
      *
@@ -435,17 +438,17 @@ final class plan_parser_test extends \basic_testcase {
     public function test_headings_in_code_fences_and_deeper_headings_are_body(): void {
         $lines = [
             'How to write a day in the plan:',
-            '```markdown',
+            self::BACKTICKS . 'markdown',
             '### 2026-12-25 [2h]',
             '# Another module',
             '## Another block',
-            '```',
+            self::BACKTICKS,
             '~~~',
             '### 2026-12-26 [2h]',
             '~~~',
-            '  ```',
+            '  ' . self::BACKTICKS,
             '### 2026-12-28 [2h]',
-            "\t```",
+            "\t" . self::BACKTICKS,
             '#### Level 4',
             '##### Level 5',
             '###### Level 6',
@@ -849,8 +852,12 @@ final class plan_parser_test extends \basic_testcase {
      * @param string[]|null $year First and last day of the school year.
      * @return plan_result
      */
-    private static function parse(string $text, ?array $holidays = null, ?array $timetable = self::TIMETABLE,
-            ?array $year = null): plan_result {
+    private static function parse(
+        string $text,
+        ?array $holidays = null,
+        ?array $timetable = self::TIMETABLE,
+        ?array $year = null,
+    ): plan_result {
         return (new plan_parser())->parse($text, $holidays, $timetable, $year);
     }
 

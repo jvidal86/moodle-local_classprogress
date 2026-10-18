@@ -33,9 +33,13 @@ final class plan_result {
      * @param plan_issue[] $issues Every issue, ordered by line.
      */
     public function __construct(
+        /** @var plan_module|null The first # heading, or null when there is none. */
         public readonly ?plan_module $module,
+        /** @var string[] Text of every ## heading, in order. */
         public readonly array $blocks,
+        /** @var plan_day[] Every readable day, in order. */
         public readonly array $days,
+        /** @var plan_issue[] Every issue, ordered by line. */
         public readonly array $issues,
     ) {
     }

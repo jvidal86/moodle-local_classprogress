@@ -32,8 +32,11 @@ final class plan_module {
      * @param int $line Line of the heading, from 1.
      */
     public function __construct(
+        /** @var string|null Module code such as "MP 0372", or null when the heading has none. */
         public readonly ?string $code,
+        /** @var string Module title. */
         public readonly string $title,
+        /** @var int Line of the heading, from 1. */
         public readonly int $line,
     ) {
     }
