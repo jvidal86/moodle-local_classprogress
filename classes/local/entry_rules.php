@@ -63,28 +63,43 @@ final class entry_rules {
     /** @var string Issue: an unplanned date lies outside the school year. */
     public const OUTSIDE_YEAR = 'outside_year';
 
+    /** @var string Issue: a plan item dated after today is logged as done or partial. Other checks are skipped. */
+    public const FUTURE_NOT_DONE_ONLY = 'future_not_done_only';
+
+    /** @var string Issue: an unplanned date lies after today. */
+    public const FUTURE_UNPLANNED = 'future_unplanned';
+
     /**
-     * Checks an entry for a plan item: done, partial or not done. Its date comes from the item and is not checked.
+     * Checks an entry for a plan item: done, partial or not done, and only not done for a session after today.
+     *
+     * The session day comes from the item; the entry's own date is not checked.
      *
      * @param entry_data $entry The entry as typed.
+     * @param string $sessiondate The plan item's day, an existing yyyy-mm-dd day.
+     * @param string $today The teacher's own day, an existing yyyy-mm-dd day.
      * @return string[] Issue codes in a fixed order (status, content, reason); empty when valid.
      */
-    public static function check_planned(entry_data $entry): array {
+    public static function check_planned(entry_data $entry, string $sessiondate, string $today): array {
         if (!in_array($entry->status, [self::DONE, self::PARTIAL, self::NOT_DONE], true)) {
             return [self::BAD_STATUS];
+        }
+        if ($entry->status !== self::NOT_DONE && dates::day_number($sessiondate) > dates::day_number($today)) {
+            return [self::FUTURE_NOT_DONE_ONLY];
         }
         return self::check_text($entry);
     }
 
     /**
-     * Checks an entry for an unplanned session: added, on a day inside the date window and the school year.
+     * Checks an entry for an unplanned session: added, on a day inside the date window and the school year, not
+     * after today.
      *
      * @param entry_data $entry The entry as typed.
      * @param string $yearfirst First day of the school year, an existing yyyy-mm-dd day.
      * @param string $yearlast Last day of the school year, an existing yyyy-mm-dd day.
+     * @param string $today The teacher's own day, an existing yyyy-mm-dd day.
      * @return string[] Issue codes in a fixed order (status, content, date); empty when valid.
      */
-    public static function check_unplanned(entry_data $entry, string $yearfirst, string $yearlast): array {
+    public static function check_unplanned(entry_data $entry, string $yearfirst, string $yearlast, string $today): array {
         if ($entry->status !== self::ADDED) {
             return [self::BAD_STATUS];
         }
@@ -95,6 +110,8 @@ final class entry_rules {
             $issues[] = self::OUT_OF_RANGE;
         } else if (!dates::within($entry->date, $yearfirst, $yearlast)) {
             $issues[] = self::OUTSIDE_YEAR;
+        } else if (dates::day_number($entry->date) > dates::day_number($today)) {
+            $issues[] = self::FUTURE_UNPLANNED;
         }
         return $issues;
     }

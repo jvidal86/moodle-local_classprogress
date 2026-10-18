@@ -101,11 +101,13 @@ final class written_on_test extends \basic_testcase {
     }
 
     /**
-     * An entry written after its session is late by the difference in days; written on or before it, not late.
+     * An entry written after its session is late by the difference in days; written on or before it (a cancellation
+     * announced in advance), not late.
      *
      * @dataProvider days_late_provider
      * @covers \local_classprogress\local\written_on
      * @group REQ-LOG-004
+     * @group REQ-LOG-009
      * @param string $writtenon The written-on day.
      * @param string $sessiondate The session day.
      * @param int $expected Days late.

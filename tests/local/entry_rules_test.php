@@ -19,7 +19,7 @@ namespace local_classprogress\local;
 /**
  * Tests for the rules an entry's data must follow: status, what was done, reason, carry-over and unplanned date.
  *
- * The school year in the unplanned cases runs from 2026-09-01 to 2027-06-30.
+ * The school year in the unplanned cases runs from 2026-09-01 to 2027-06-30. "Today" is always given explicitly.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -27,13 +27,24 @@ namespace local_classprogress\local;
  */
 final class entry_rules_test extends \basic_testcase {
     /**
-     * Checks an unplanned entry against the 2026-2027 school year used in these tests.
+     * Checks a planned entry for a session held today, 2026-10-20.
      *
      * @param entry_data $entry The entry.
      * @return string[] Issue codes.
      */
-    private static function check_in_year(entry_data $entry): array {
-        return entry_rules::check_unplanned($entry, '2026-09-01', '2027-06-30');
+    private static function check_today(entry_data $entry): array {
+        return entry_rules::check_planned($entry, '2026-10-20', '2026-10-20');
+    }
+
+    /**
+     * Checks an unplanned entry against the 2026-2027 school year used in these tests.
+     *
+     * @param entry_data $entry The entry.
+     * @param string $today Today; by default the last day of the year, so no day of the year is after it.
+     * @return string[] Issue codes.
+     */
+    private static function check_in_year(entry_data $entry, string $today = '2027-06-30'): array {
+        return entry_rules::check_unplanned($entry, '2026-09-01', '2027-06-30', $today);
     }
 
     /**
@@ -58,7 +69,7 @@ final class entry_rules_test extends \basic_testcase {
      * @param entry_data $entry A valid planned entry.
      */
     public function test_planned_entry_takes_done_partial_or_not_done(entry_data $entry): void {
-        $this->assertSame([], entry_rules::check_planned($entry));
+        $this->assertSame([], self::check_today($entry));
     }
 
     /**
@@ -86,7 +97,7 @@ final class entry_rules_test extends \basic_testcase {
     public function test_planned_entry_refuses_other_statuses(string $status): void {
         $entry = new entry_data(status: $status);
 
-        $this->assertSame([entry_rules::BAD_STATUS], entry_rules::check_planned($entry));
+        $this->assertSame([entry_rules::BAD_STATUS], self::check_today($entry));
     }
 
     /**
@@ -116,10 +127,10 @@ final class entry_rules_test extends \basic_testcase {
             $added = new entry_data(status: 'added', content: $content, date: '2026-10-20');
             $notdone = new entry_data(status: 'not_done', content: $content, reason: 'trip');
 
-            $this->assertSame([entry_rules::CONTENT_REQUIRED], entry_rules::check_planned($done));
-            $this->assertSame([entry_rules::CONTENT_REQUIRED], entry_rules::check_planned($partial));
+            $this->assertSame([entry_rules::CONTENT_REQUIRED], self::check_today($done));
+            $this->assertSame([entry_rules::CONTENT_REQUIRED], self::check_today($partial));
             $this->assertSame([entry_rules::CONTENT_REQUIRED], self::check_in_year($added));
-            $this->assertSame([], entry_rules::check_planned($notdone));
+            $this->assertSame([], self::check_today($notdone));
         }
     }
 
@@ -133,8 +144,8 @@ final class entry_rules_test extends \basic_testcase {
         $partial = new entry_data(status: 'partial', content: 'Half the exercises');
         $notdone = new entry_data(status: 'not_done');
 
-        $this->assertSame([entry_rules::REASON_REQUIRED], entry_rules::check_planned($partial));
-        $this->assertSame([entry_rules::REASON_REQUIRED], entry_rules::check_planned($notdone));
+        $this->assertSame([entry_rules::REASON_REQUIRED], self::check_today($partial));
+        $this->assertSame([entry_rules::REASON_REQUIRED], self::check_today($notdone));
     }
 
     /**
@@ -165,8 +176,8 @@ final class entry_rules_test extends \basic_testcase {
         $bare = new entry_data(status: 'not_done', reason: $reason);
         $full = new entry_data(status: 'partial', content: 'Half', reason: $reason, note: 'Fire drill', measure: 'Homework');
 
-        $this->assertSame([], entry_rules::check_planned($bare));
-        $this->assertSame([], entry_rules::check_planned($full));
+        $this->assertSame([], self::check_today($bare));
+        $this->assertSame([], self::check_today($full));
     }
 
     /**
@@ -178,7 +189,7 @@ final class entry_rules_test extends \basic_testcase {
     public function test_unknown_reason_is_refused(): void {
         foreach (['Strike', 'holiday', 'vaga', ' other'] as $reason) {
             $entry = new entry_data(status: 'not_done', reason: $reason);
-            $this->assertSame([entry_rules::BAD_REASON], entry_rules::check_planned($entry), $reason);
+            $this->assertSame([entry_rules::BAD_REASON], self::check_today($entry), $reason);
         }
     }
 
@@ -192,7 +203,7 @@ final class entry_rules_test extends \basic_testcase {
     public function test_several_issues_are_reported_together(): void {
         $entry = new entry_data(status: 'partial', content: ' ', reason: 'nope');
 
-        $this->assertSame([entry_rules::CONTENT_REQUIRED, entry_rules::BAD_REASON], entry_rules::check_planned($entry));
+        $this->assertSame([entry_rules::CONTENT_REQUIRED, entry_rules::BAD_REASON], self::check_today($entry));
     }
 
     /**
@@ -276,6 +287,59 @@ final class entry_rules_test extends \basic_testcase {
      * @group REQ-LOG-007
      */
     public function test_planned_entry_date_is_not_checked(): void {
-        $this->assertSame([], entry_rules::check_planned(new entry_data(status: 'done', content: 'All', date: 'whatever')));
+        $this->assertSame([], self::check_today(new entry_data(status: 'done', content: 'All', date: 'whatever')));
+    }
+
+    /**
+     * Planned entries for sessions before, on and after today (2026-10-20), with the issues each gives.
+     *
+     * @return array Cases: entry, session day, expected issues.
+     */
+    public static function session_day_provider(): array {
+        $done = new entry_data(status: 'done', content: 'All');
+        $partial = new entry_data(status: 'partial', content: 'Half', reason: 'trip');
+        $notdone = new entry_data(status: 'not_done', reason: 'strike', note: 'Announced strike');
+        return [
+            'done yesterday' => [$done, '2026-10-19', []],
+            'done today' => [$done, '2026-10-20', []],
+            'partial today' => [$partial, '2026-10-20', []],
+            'done tomorrow' => [$done, '2026-10-21', [entry_rules::FUTURE_NOT_DONE_ONLY]],
+            'partial tomorrow' => [$partial, '2026-10-21', [entry_rules::FUTURE_NOT_DONE_ONLY]],
+            'done next year' => [$done, '2027-01-11', [entry_rules::FUTURE_NOT_DONE_ONLY]],
+            'not done tomorrow, announced' => [$notdone, '2026-10-21', []],
+            'not done tomorrow without a reason' => [
+                new entry_data(status: 'not_done'), '2026-10-21', [entry_rules::REASON_REQUIRED],
+            ],
+            'unknown status tomorrow' => [new entry_data(status: 'added', content: 'x'), '2026-10-21', [entry_rules::BAD_STATUS]],
+        ];
+    }
+
+    /**
+     * A session after today may only be logged as not done, with its reason; done and partial wait for the day.
+     *
+     * @dataProvider session_day_provider
+     * @covers \local_classprogress\local\entry_rules
+     * @group REQ-LOG-009
+     * @param entry_data $entry The entry.
+     * @param string $sessiondate The plan item's day.
+     * @param string[] $expected Expected issue codes.
+     */
+    public function test_session_after_today_may_only_be_not_done(entry_data $entry, string $sessiondate, array $expected): void {
+        $this->assertSame($expected, entry_rules::check_planned($entry, $sessiondate, '2026-10-20'));
+    }
+
+    /**
+     * An unplanned session may be dated today or earlier, never after today.
+     *
+     * @covers \local_classprogress\local\entry_rules
+     * @group REQ-LOG-009
+     */
+    public function test_unplanned_session_cannot_be_after_today(): void {
+        $entry = fn(string $date): entry_data => new entry_data(status: 'added', content: 'Revision', date: $date);
+
+        $this->assertSame([], self::check_in_year($entry('2026-10-19'), '2026-10-20'));
+        $this->assertSame([], self::check_in_year($entry('2026-10-20'), '2026-10-20'));
+        $this->assertSame([entry_rules::FUTURE_UNPLANNED], self::check_in_year($entry('2026-10-21'), '2026-10-20'));
+        $this->assertSame([entry_rules::OUTSIDE_YEAR], self::check_in_year($entry('2027-07-01'), '2026-10-20'));
     }
 }
