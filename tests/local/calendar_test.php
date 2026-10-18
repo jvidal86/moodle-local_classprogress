@@ -211,6 +211,97 @@ final class calendar_test extends \basic_testcase {
         $this->assertSame([], $result->sessions);
         $this->assertSame(0.0, $result->totalhours);
         $this->assertSame([], $result->sessionspermonth);
+        $this->assertSame([], $result->lost);
+    }
+
+    /**
+     * Each holiday entry reports how many class sessions it removed, zero included.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-003
+     */
+    public function test_each_holiday_reports_sessions_it_removed(): void {
+        $text = "2026-09-16 Festa\n2026-09-19 to 2026-09-20 Cap de setmana\n2026-09-21 to 2026-09-25 Setmana";
+        $holidays = holiday_parser::parse($text)->entries;
+
+        $result = calendar::compute('2026-09-14', '2026-09-27', [0 => 2, 2 => 1], $holidays);
+
+        $this->assertSame([0 => 1, 1 => 0, 2 => 2], $result->lost);
+        $this->assertSame([['2026-09-14', 2.0]], self::pairs($result));
+    }
+
+    /**
+     * A holiday on a weekend or another day without class removes no session.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-001
+     * @group REQ-CAL-003
+     */
+    public function test_holiday_on_weekend_removes_no_session(): void {
+        $nowednesday = [0 => 1, 1 => 1, 2 => 0, 3 => 1, 4 => 1];
+        $holidays = holiday_parser::parse("2026-10-31 to 2026-11-01 Tots Sants\n2026-10-28 Sense classe")->entries;
+
+        $result = calendar::compute('2026-10-26', '2026-11-01', $nowednesday, $holidays);
+
+        $this->assertSame([0 => 0, 1 => 0], $result->lost);
+        $this->assertCount(4, $result->sessions);
+    }
+
+    /**
+     * A day covered by two entries is lost once, and counts for the first entry only.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-003
+     */
+    public function test_overlapping_holidays_count_lost_session_for_first_entry_only(): void {
+        $holidays = holiday_parser::parse("2026-12-21 to 2026-12-23 Abans de Nadal\n2026-12-22 Pont")->entries;
+
+        $result = calendar::compute('2026-12-21', '2026-12-23', [1 => 1], $holidays);
+
+        $this->assertSame([0 => 1, 1 => 0], $result->lost);
+        $this->assertSame([], $result->sessions);
+    }
+
+    /**
+     * Only class days between the first and last class day count as lost, and lost keeps the holiday array keys.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-003
+     */
+    public function test_only_days_inside_range_count_as_lost_and_keys_are_kept(): void {
+        $entries = holiday_parser::parse("2026-09-07 to 2026-09-15 Abans\n2026-09-28 Despres")->entries;
+        $holidays = ['crossing' => $entries[0], 42 => $entries[1]];
+
+        $result = calendar::compute('2026-09-14', '2026-09-27', [0 => 1, 1 => 1], $holidays);
+
+        $this->assertSame(['crossing' => 2, 42 => 0], $result->lost);
+        $this->assertCount(2, $result->sessions);
+    }
+
+    /**
+     * Module 0372 loses the sessions the teacher's tool reports for each holiday label.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-003
+     */
+    public function test_real_module_loses_sessions_per_label_as_teachers_tool(): void {
+        $holidays = self::school_holidays();
+
+        $result = calendar::compute('2026-09-14', '2027-05-24', [0 => 2.0, 4 => 2.0], $holidays);
+
+        $bylabel = [];
+        foreach ($result->lost as $key => $lost) {
+            $label = $holidays[$key]->label;
+            $bylabel[$label] = ($bylabel[$label] ?? 0) + $lost;
+        }
+        $this->assertSame([
+            "Festa Nacional d'Espanya" => 1,
+            'Lliure disposició del centre' => 5,
+            'Vacances de Nadal' => 4,
+            'Vacances de Setmana Santa' => 3,
+        ], array_filter($bylabel));
+        $this->assertCount(count($holidays), $result->lost);
+        $this->assertSame(73, count($result->sessions) + array_sum($result->lost));
     }
 
     /**

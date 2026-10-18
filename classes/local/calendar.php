@@ -48,31 +48,37 @@ final class calendar {
      */
     public static function compute(?string $first, ?string $last, array $timetable, array $holidays): calendar_result {
         if ($first === null || $first === '' || $last === null || $last === '') {
-            return new calendar_result(self::MISSING_DATES, [], 0.0, []);
+            return new calendar_result(self::MISSING_DATES, [], 0.0, [], []);
         }
         if (!self::is_date($first) || !self::is_date($last)) {
-            return new calendar_result(self::INVALID_DATE, [], 0.0, []);
+            return new calendar_result(self::INVALID_DATE, [], 0.0, [], []);
         }
         if ($last < $first) {
-            return new calendar_result(self::LAST_BEFORE_FIRST, [], 0.0, []);
+            return new calendar_result(self::LAST_BEFORE_FIRST, [], 0.0, [], []);
         }
         $sessions = [];
         $totalhours = 0.0;
         $permonth = [];
+        $lost = array_fill_keys(array_keys($holidays), 0);
         $utc = new \DateTimeZone('UTC');
         $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $first, $utc);
         for ($iso = $first; $iso <= $last; $iso = $day->format('Y-m-d')) {
             $month = substr($iso, 0, 7);
             $permonth[$month] ??= 0;
             $hours = (float) ($timetable[(int) $day->format('N') - 1] ?? 0);
-            if ($hours > 0 && self::holiday_of($iso, $holidays) === null) {
-                $sessions[] = new calendar_session($iso, $hours);
-                $totalhours += $hours;
-                $permonth[$month]++;
+            if ($hours > 0) {
+                $holiday = self::holiday_of($iso, $holidays);
+                if ($holiday !== null) {
+                    $lost[$holiday]++;
+                } else {
+                    $sessions[] = new calendar_session($iso, $hours);
+                    $totalhours += $hours;
+                    $permonth[$month]++;
+                }
             }
             $day = $day->modify('+1 day');
         }
-        return new calendar_result(null, $sessions, $totalhours, $permonth);
+        return new calendar_result(null, $sessions, $totalhours, $permonth, $lost);
     }
 
     /**
