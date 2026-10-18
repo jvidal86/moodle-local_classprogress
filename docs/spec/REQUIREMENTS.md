@@ -205,48 +205,48 @@ Added 2026-10-18. Importing and approving a plan and creating, editing or deleti
 
 ---
 
-## LOG · Logging what was done (M3) · drafted 2026-10-18, awaiting acceptance
+## LOG · Logging what was done (M3) · agreed 2026-10-18
 
 ### REQ-LOG-001 Pending and upcoming sessions
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 For an approved plan, every plan item dated today or earlier that has no entry is **pending** (listed oldest first); items dated after today are **upcoming**. Items of a draft plan are neither. "Today" is the teacher's own date in their time zone.
 
 ### REQ-LOG-002 Entry status
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 An entry for a plan item has the status `done`, `partial` or `not_done`; an entry for an unplanned session has the status `added`. What was done is required, except for `not_done`, where it may be empty.
 
 ### REQ-LOG-003 Deviation reason and measure
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 `partial` and `not_done` require a reason, one of: strike (vaga), incident, trip (excursió), school event (activitat de centre), teacher absent (absència), other; plus an optional note and an optional corrective measure (the "mesura" of the current Word sheets). `done` and `added` keep neither reason nor note.
 
 ### REQ-LOG-004 Written-on date and late flag
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 The written-on date is the teacher's own date (their time zone) when the entry is first saved, and never changes afterwards; later edits record a separate last-edited time. An entry whose written-on date is after its session date is **late by N days**, shown wherever the entry appears.
 
 ### REQ-LOG-005 One entry per session, edit and delete
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 A plan item has at most one entry. Saving again updates it. An entry can be deleted after a confirmation step. Saving an entry that was changed elsewhere after the form opened is refused, as in REQ-DAT-003.
 
 ### REQ-LOG-006 Carry-over
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 A `partial` entry may be marked "continue in the next session"; the editor of the next plan item of the same plan then shows what was left over.
 
 ### REQ-LOG-007 Unplanned sessions
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 A teacher can add an entry that belongs to no plan item, for a date inside the plan's school year, with the status `added`.
 
 ### REQ-LOG-008 Only approved plans are logged
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 Entries can be created only for approved plans; a draft plan shows no log.
 
-## HIS · History (M3) · drafted 2026-10-18, awaiting acceptance
+## HIS · History (M3) · agreed 2026-10-18
 
 ### REQ-HIS-001 Every change is recorded
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 Every creation, update and deletion of an entry writes a history row with a full snapshot of the entry, the acting user and, for "log in as", the real user, in the same transaction as the change.
 
 ### REQ-HIS-002 History is kept and shown
-Phase: M3 · Status: draft
+Phase: M3 · Status: agreed
 History rows are never edited and survive the deletion of their entry. The history of an entry, and of deleted entries of a plan, can be viewed newest first.
 
 ---
