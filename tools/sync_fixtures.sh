@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Copy test-data/ into tests/fixtures/ so the plugin's PHPUnit tests never read outside the plugin.
-#   tools/sync_fixtures.sh          copy
-#   tools/sync_fixtures.sh --check  exit 1 if tests/fixtures differs from test-data (run before every release)
+# Copy test-data/ into a plugin's tests/fixtures/ so its PHPUnit tests never read outside the plugin.
+#   tools/sync_fixtures.sh                    copy into this plugin's tests/fixtures
+#   tools/sync_fixtures.sh --check            exit 1 if tests/fixtures differs from test-data (run before every release)
+#   tools/sync_fixtures.sh DIR [--check]      the same for another plugin's fixtures folder, such as
+#                                             ~/PROJECTS/moodle-mod_classprogress/tests/fixtures (the course activity)
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/test-data"
 dst="$root/tests/fixtures"
+if [[ $# -gt 0 && "$1" != "--check" ]]; then
+  dst="$1"; shift
+fi
 
 build() {
   local out="$1"
@@ -20,7 +25,7 @@ build() {
 if [[ "${1:-}" == "--check" ]]; then
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
   build "$tmp"
-  diff -r "$tmp" "$dst" && echo "tests/fixtures matches test-data"
+  diff -r "$tmp" "$dst" && echo "$dst matches test-data"
 else
-  rm -rf "$dst"; build "$dst"; echo "copied test-data -> tests/fixtures"
+  rm -rf "$dst"; build "$dst"; echo "copied test-data -> $dst"
 fi

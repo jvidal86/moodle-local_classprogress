@@ -1,6 +1,7 @@
-# Development environment: how to work on `local_classprogress`
+# Development environment: how to work on `local_classprogress` and `mod_classprogress`
 
-Written 2026-10-18, updated the same day by M0. **Verified** means run on this machine and seen to work, with the result noted. **Path checked** means the file exists where stated but the command has not been run yet (it has nothing to act on before M1). Nothing in this file is "planned" any more.
+Written 2026-10-18, updated the same day by M0 and, for the course activity `mod_classprogress` (decision 12), by M3:
+the second repository is `~/PROJECTS/moodle-mod_classprogress`, mounted next to this one in both stacks (section 4). **Verified** means run on this machine and seen to work, with the result noted. **Path checked** means the file exists where stated but the command has not been run yet (it has nothing to act on before M1). Nothing in this file is "planned" any more.
 
 ## 1. Where Moodle runs
 
@@ -92,7 +93,7 @@ export MOODLE_DOCKER_BROWSER=chrome
 export PATH=$HOME/moodle-dev/moodle-docker-503/bin:$PATH
 ```
 
-Mount the plugin with a `local.yml` inside each `moodle-docker` clone (bind mount, not a symlink; Docker does not follow symlinks). The target path differs by layout. The Selenium container gets the same mount read-only, because `moodle-docker` mounts the Moodle code into Selenium too and Behat file uploads (the `.md` plan upload, M2) read the file from there:
+Mount both plugins with a `local.yml` inside each `moodle-docker` clone (bind mounts, not symlinks; Docker does not follow symlinks). The target path differs by layout. The Selenium container gets the same mounts read-only, because `moodle-docker` mounts the Moodle code into Selenium too and Behat file uploads (the `.md` plan upload, M2) read the file from there:
 
 ```yaml
 # ~/moodle-dev/moodle-docker-405/local.yml
@@ -100,18 +101,22 @@ services:
   webserver:
     volumes:
       - "/home/jvidal/PROJECTS/class-progress-tracking:/var/www/html/local/classprogress"
+      - "/home/jvidal/PROJECTS/moodle-mod_classprogress:/var/www/html/mod/classprogress"
   selenium:
     volumes:
       - "/home/jvidal/PROJECTS/class-progress-tracking:/var/www/html/local/classprogress:ro"
+      - "/home/jvidal/PROJECTS/moodle-mod_classprogress:/var/www/html/mod/classprogress:ro"
 
 # ~/moodle-dev/moodle-docker-503/local.yml   (5.x keeps plugins under public/)
 services:
   webserver:
     volumes:
       - "/home/jvidal/PROJECTS/class-progress-tracking:/var/www/html/public/local/classprogress"
+      - "/home/jvidal/PROJECTS/moodle-mod_classprogress:/var/www/html/public/mod/classprogress"
   selenium:
     volumes:
       - "/home/jvidal/PROJECTS/class-progress-tracking:/var/www/html/public/local/classprogress:ro"
+      - "/home/jvidal/PROJECTS/moodle-mod_classprogress:/var/www/html/public/mod/classprogress:ro"
 ```
 
 Every `moodle-docker-compose` call prints `Including local options from .../local.yml`, which confirms the file is picked up.
@@ -121,7 +126,7 @@ Start a stack and install Moodle (4.5 shown; for 5.3 use `env-503.sh`, `moodle-d
 ```bash
 source ~/moodle-dev/env-405.sh
 cd ~/moodle-dev/moodle-docker-405
-mkdir -p $MOODLE_DOCKER_WWWROOT/local/classprogress                # 5.3: $MOODLE_DOCKER_WWWROOT/public/local/classprogress
+mkdir -p $MOODLE_DOCKER_WWWROOT/local/classprogress $MOODLE_DOCKER_WWWROOT/mod/classprogress   # 5.3: under public/
 cp config.docker-template.php $MOODLE_DOCKER_WWWROOT/config.php   # config.php stays at the Moodle root, also on 5.x
 moodle-docker-compose up -d
 moodle-docker-wait-for-db
@@ -150,6 +155,8 @@ moodle-docker-compose exec webserver php admin/cli/cfg.php --component=local_cla
 | PHPUnit and Behat scripts | `public/admin/tool/phpunit/cli/init.php` and `util.php`; `public/admin/tool/behat/cli/init.php`, `run.php` and `util.php`. |
 | `config.php`, `vendor/`, `phpunit.xml` | At the root: `config.php` (copied template, it loads `lib/setup.php`, a root shim that loads `public/lib/setup.php`), `vendor/bin/phpunit`, and the `phpunit.xml` that init writes. |
 
+**Recreated from scratch in M3 (verified 2026-10-18, both stacks):** after adding the second mount, `moodle-docker-compose down -v`, `up -d`, `moodle-docker-wait-for-db`, `install_database.php` as above (it installs `local_classprogress` and `mod_classprogress`; the activity requires the local plugin's version 2026101806), then the PHPUnit and Behat init of section 5. About six minutes per stack, both run at once. The sites' earlier plugin data is gone, as agreed.
+
 Stop without losing data: `moodle-docker-compose stop` and later `start`. Destroy a stack: `moodle-docker-compose down` (data gone; add `-v` to remove the database volume too). Both act only on the compose project named by `COMPOSE_PROJECT_NAME` (`cp405` or `cp503`), so **always source the stack's `env-*.sh` first**. Without it the wrapper stops with `Error: $MOODLE_DOCKER_WWWROOT is not set or not an existing directory`; never run plain `docker compose down` or any `prune` here, since the local lab (`moodle` project) and other projects share the same Docker. `stop` and `start` verified on 5.3: afterwards the login and the PHPUnit run work without a new init. `down` has not been run yet.
 
 **Where the data lives** (from `docker inspect`; the recreate case has not been tried): the database is in an anonymous Docker volume of the `db` container, but `moodledata`, `phpunitdata` and `behatdata` live inside the `webserver` container itself (no volume). Anything that recreates that container (a change to `local.yml` or to a variable in `env-*.sh`, followed by `up -d`) loses them while the database survives, and the site breaks. With throw-away sites the fix is to start again: `down -v`, `up -d`, `install_database.php`, then the PHPUnit and Behat init.
@@ -167,8 +174,11 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    # once per stack, and again after adding test classes or generators
    moodle-docker-compose exec webserver php admin/tool/phpunit/cli/init.php        # 5.x: public/admin/tool/phpunit/cli/init.php
    moodle-docker-compose exec webserver vendor/bin/phpunit --fail-on-warning --testsuite local_classprogress_testsuite
+   moodle-docker-compose exec webserver vendor/bin/phpunit --fail-on-warning --testsuite mod_classprogress_testsuite
    # one file: 4.5 local/classprogress/tests/x_test.php, 5.3 public/local/classprogress/tests/x_test.php
+   # (the activity: mod/classprogress/tests/..., public/mod/classprogress/tests/...)
    ```
+   The activity's tests read the plan fixtures from its own `tests/fixtures/`, a copy of `test-data/` made with `tools/sync_fixtures.sh ~/PROJECTS/moodle-mod_classprogress/tests/fixtures` (add `--check` to compare). Raising either plugin's `version` needs a new `init.php` before PHPUnit runs again.
    `init.php` takes about 1.5 minutes on 4.5 and 2 minutes on 5.3 and ends with `PHPUnit test environment setup complete.` It writes `phpunit.xml` at the Moodle root with a `local_classprogress_testsuite` over `[public/]local/classprogress/tests` (excluding `tests/fixtures` and `tests/classes`). Result with `tests/installation_test.php` (2 tests, 7 assertions):
    - **4.5** (PHPUnit 9.6.34): `OK (2 tests, 7 assertions)`, exit 0.
    - **5.3** (PHPUnit 11.5.56): `OK, but there were issues! Tests: 2, Assertions: 7, PHPUnit Deprecations: 1.`, **exit 0**. With `--display-phpunit-deprecations` the message is: `Metadata found in doc-comment for class local_classprogress\installation_test. Metadata in doc-comments is deprecated and will no longer be supported in PHPUnit 12. Update your test code to use attributes instead.` (one line per class or method that carries annotations).
@@ -178,6 +188,7 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    ```bash
    moodle-docker-compose exec webserver php admin/tool/behat/cli/init.php          # 5.x: public/admin/tool/behat/cli/init.php
    moodle-docker-compose exec -u www-data webserver php admin/tool/behat/cli/run.php --tags=@local_classprogress   # 5.x: public/admin/tool/behat/cli/run.php
+   moodle-docker-compose exec -u www-data webserver php admin/tool/behat/cli/run.php --tags=@mod_classprogress
    ```
    `init.php` takes about 1.5 minutes and ends with `Acceptance tests environment enabled on http://webserver`. Failure screenshots appear at `http://localhost:8000/_/faildumps/` (5.3: port 8001; both URLs answer 200).
 5. Check the plan parser and test data on the host, no Moodle needed (**verified**, all 14 checks pass):
@@ -185,6 +196,7 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    cd ~/PROJECTS/class-progress-tracking
    python3 tools/check_plan.py --selftest
    python3 tools/check_traceability.py          # which requirements have tests; --strict M<n> at the end of a phase
+   python3 tools/check_traceability.py --extra-root ~/PROJECTS/moodle-mod_classprogress --strict M3   # both repositories
    ```
    The test-first loop and what goes in which test layer are in `docs/TESTING_STRATEGY.md`.
 6. Style, PHPDoc, savepoints, Mustache, `validate`: run with `moodle-plugin-ci` (details in `docs/moodle-rules/03-testing-ci-and-release.md`, section C). The GitHub Actions workflow `.github/workflows/ci.yml` is the reference; locally the same tool runs without its `install` step (verified on both stacks, all exit 0):
@@ -206,6 +218,10 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    m=$(mktemp -d) && (cd ~/moodle-dev/moodle405 && tar --exclude=./.git --exclude=./local/classprogress -cf - .) | tar -xf - -C "$m"
    mkdir -p "$m/local/classprogress" && git ls-files -co --exclude-standard | grep -v '^tools/host-phpunit/vendor' | tar -cf - -T - | tar -xf - -C "$m/local/classprogress"
    ~/moodle-dev/ci/bin/moodle-plugin-ci mustache --moodle "$m" "$m/local/classprogress"; rm -rf "$m"
+
+   # The activity is checked the same way from ~/PROJECTS/moodle-mod_classprogress (phplint, phpcs, savepoints on the
+   # host; mustache on a scratch copy with both plugins copied in; validate and phpdoc in the container on
+   # /var/www/html/mod/classprogress, 5.3: /var/www/html/public/mod/classprogress).
 
    # validate, phpdoc and phpunit load Moodle's config.php, so they run in the webserver container, on the mounted
    # plugin (4.5 shown; 5.3: cp503-webserver-1 and /var/www/html/public/local/classprogress).

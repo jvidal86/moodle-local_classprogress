@@ -10,6 +10,8 @@ Mentions anywhere else (comments, prose, Markdown) do not count.
 
     python3 tools/check_traceability.py                 # coverage matrix, exit 1 only for unknown or duplicate ids
     python3 tools/check_traceability.py --strict M2     # also exit 1 if any requirement of phase M0..M2 has no test
+    python3 tools/check_traceability.py --extra-root ~/PROJECTS/moodle-mod_classprogress --strict M3
+                                                        # also count the tests of the course activity's repository
 """
 import argparse
 import json
@@ -40,11 +42,12 @@ def read_requirements(path):
     return reqs, dup
 
 
-def scan_citations():
-    cites = defaultdict(set)
+def scan_citations(root=ROOT, cites=None):
+    cites = defaultdict(set) if cites is None else cites
+    label = "" if root == ROOT else root.name + ":"
 
     def add(rid, path):
-        cites[rid].add(str(path.relative_to(ROOT)))
+        cites[rid].add(label + str(path.relative_to(root)))
 
     def walk_json(node, path):
         if isinstance(node, dict):
@@ -61,7 +64,7 @@ def scan_citations():
 
     group = re.compile(r"@group\s+(" + ID.pattern + r")\b")
     for d in SCAN_DIRS:
-        base = ROOT / d
+        base = root / d
         if not base.exists():
             continue
         for p in base.rglob("*"):
@@ -75,7 +78,7 @@ def scan_citations():
                     walk_json(json.loads(p.read_text(encoding="utf-8")), p)
                 except (ValueError, UnicodeDecodeError):
                     pass
-    for p in ROOT.rglob("*.feature"):
+    for p in root.rglob("*.feature"):
         if ".git" in p.parts or "worktrees" in p.parts:
             continue
         for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -89,10 +92,17 @@ def scan_citations():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--strict", metavar="PHASE", help="fail if a requirement of this phase or an earlier one has no test, e.g. M2")
+    ap.add_argument("--extra-root", metavar="DIR", action="append", default=[],
+                    help="another repository whose tests count too, such as the course activity's; may be repeated")
     args = ap.parse_args()
 
     reqs, dup = read_requirements(ROOT / "docs" / "spec" / "REQUIREMENTS.md")
     cites = scan_citations()
+    for extra in args.extra_root:
+        path = Path(extra).expanduser().resolve()
+        if not path.is_dir():
+            print(f"--extra-root {extra}: not a directory"); sys.exit(1)
+        scan_citations(path, cites)
     unknown = sorted(set(cites) - set(reqs))
 
     by_phase = defaultdict(list)
