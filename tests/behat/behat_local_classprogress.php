@@ -117,7 +117,7 @@ class behat_local_classprogress extends behat_base {
     }
 
     /**
-     * Opens a page, checks Moodle's error box on it, then goes back to the plugin's home page.
+     * Opens a page, checks Moodle's error box on it, then goes back to the page shown before.
      *
      * Leaving is needed because the check that Behat runs after every step fails on any page with an error box.
      *
@@ -126,6 +126,7 @@ class behat_local_classprogress extends behat_base {
      * @throws ExpectationException When the page shows no error, or another one.
      */
     private function open_refused_page(moodle_url $url, string $message): void {
+        $previous = $this->getSession()->getCurrentUrl();
         $this->getSession()->visit($this->locate_path($url->out_as_local_url(false)));
         $box = $this->getSession()->getPage()->find('xpath', "//div[@data-rel='fatalerror']");
         $text = $box ? $box->getText() : '';
@@ -133,6 +134,6 @@ class behat_local_classprogress extends behat_base {
             $found = $box ? "the error \"{$text}\"" : 'no error';
             throw new ExpectationException("Expected the error \"{$message}\" on {$url}, found {$found}.", $this->getSession());
         }
-        $this->getSession()->visit($this->locate_path('/local/classprogress/index.php'));
+        $this->getSession()->visit($previous);
     }
 }

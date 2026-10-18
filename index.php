@@ -31,6 +31,7 @@ $context = \context_user::instance($USER->id);
 $PAGE->set_url(new \core\url('/local/classprogress/index.php'));
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('standard');
+$PAGE->set_primary_active_tab('local_classprogress');
 $PAGE->set_title(get_string('pluginname', 'local_classprogress'));
 $PAGE->set_heading(get_string('pluginname', 'local_classprogress'));
 

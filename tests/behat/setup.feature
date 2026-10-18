@@ -71,6 +71,25 @@ Feature: Set up a school year and a plan
     And I should see "20" in the "MP 0372 · Gestió de bases de dades" "table_row"
     And I should see "40" in the "MP 0372 · Gestió de bases de dades" "table_row"
 
+  @REQ-ACC-002
+  Scenario: Every page refuses a user without the capability, and a teacher reaches them from the top bar
+    Given the following "users" exist:
+      | username | firstname | lastname | email                |
+      | student1 | Carla     | Vidal    | student1@example.com |
+    And the following "course enrolments" exist:
+      | user     | course | role    |
+      | student1 | C1     | student |
+    When I log in as "student1"
+    Then the page at "/local/classprogress/index.php" shows the error "Sorry, but you do not currently have permissions to do that (Use Class progress)."
+    And the page at "/local/classprogress/schoolyear.php" shows the error "Sorry, but you do not currently have permissions to do that (Use Class progress)."
+    And the page at "/local/classprogress/plan.php" shows the error "Sorry, but you do not currently have permissions to do that (Use Class progress)."
+    And I log out
+    And I log in as "teacher1"
+    And I click on "Class progress" "link" in the ".primary-navigation" "css_element"
+    And I should see "You have no school years yet."
+    And I click on "New school year" "link"
+    And I should see "Holidays and non-teaching days"
+
   @REQ-OWN-001 @REQ-OWN-002
   Scenario: J3 Another teacher cannot see or open a teacher's school year and plan
     Given I am on the "local_classprogress > Home" page logged in as "teacher1"
