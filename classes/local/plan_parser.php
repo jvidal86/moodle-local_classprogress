@@ -30,7 +30,7 @@ namespace local_classprogress\local;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class plan_parser {
-    /** @var array<string, int> Weekday names allowed before a date, in lower case, to their weekday (Monday = 0). */
+    /** @var int[] Weekday names allowed before a date, in lower case, to their weekday (Monday = 0). */
     private const WEEKDAYS = [
         'dl' => 0, 'dt' => 1, 'dm' => 1, 'dc' => 2, 'dj' => 3, 'dv' => 4, 'ds' => 5, 'dg' => 6,
         'mon' => 0, 'tue' => 1, 'wed' => 2, 'thu' => 3, 'fri' => 4, 'sat' => 5, 'sun' => 6,
@@ -81,8 +81,8 @@ final class plan_parser {
      * Reads a plan.
      *
      * @param string $text The plan: UTF-8 Markdown.
-     * @param array<string, string>|null $holidays Holiday date (yyyy-mm-dd) to label; null or empty for no holiday check.
-     * @param array<int, float>|null $timetable Weekday (Monday = 0) to class hours; null for no timetable. An empty
+     * @param string[]|null $holidays Holiday date (yyyy-mm-dd) to label; null or empty for no holiday check.
+     * @param float[]|null $timetable Weekday (Monday = 0) to class hours; null for no timetable. An empty
      *     timetable has no class day.
      * @param string[]|null $year First and last day of the school year, yyyy-mm-dd; null for no school year check.
      * @return plan_result When the text is not UTF-8, nothing but the error not_utf8 at the first line that is not.
@@ -201,8 +201,9 @@ final class plan_parser {
      * Reads the text of a ### heading.
      *
      * @param string $title Heading text, trimmed.
-     * @return array{date: string, weekday: int, prefix: ?string, named: ?int, hours: ?float, title: string}|null Null
-     *     when there is no readable, existing date, or the word before it is not a weekday.
+     * @return array|null Keys date (yyyy-mm-dd), weekday (int, Monday = 0), prefix (?string, the word as written), named
+     *     (?int, its weekday), hours (?float) and title; null when there is no readable, existing date, or the word
+     *     before it is not a weekday.
      */
     private static function day_heading(string $title): ?array {
         $groups = self::find(self::DAY, $title);
@@ -239,7 +240,7 @@ final class plan_parser {
      * Reads a line as a heading of level 1 to 3.
      *
      * @param string $line One line of the plan.
-     * @return array{0: int, 1: string}|null Level and text, or null when the line is not a #, ## or ### heading.
+     * @return array|null [level, text], or null when the line is not a #, ## or ### heading.
      */
     private static function heading(string $line): ?array {
         $groups = self::find(self::HEADING, $line);
@@ -260,7 +261,7 @@ final class plan_parser {
      *
      * @param string $line One line of the plan.
      * @param int $number Its line number.
-     * @return array{char: string, length: int, line: int}|null The fence, or null when the line opens none.
+     * @return array|null The fence (keys char, length and line), or null when the line opens none.
      */
     private static function opening_fence(string $line, int $number): ?array {
         $groups = self::find(self::OPEN_FENCE, $line);
@@ -279,7 +280,7 @@ final class plan_parser {
      * Tells whether a line closes an open code fence: its own character, at least as long, nothing but spaces after.
      *
      * @param string $line One line of the plan.
-     * @param array{char: string, length: int, line: int} $fence The open fence.
+     * @param array $fence The open fence, as opening_fence() returns it.
      * @return bool
      */
     private static function closes_fence(string $line, array $fence): bool {
@@ -291,7 +292,7 @@ final class plan_parser {
      * Splits the text of the # heading into module code and title.
      *
      * @param string $text Heading text, trimmed.
-     * @return array{0: ?string, 1: string} Code (null when there is none) and title.
+     * @return array [code (null when there is none), title].
      */
     private static function split_module(string $text): array {
         $separator = self::find(self::SEPARATOR, $text, PREG_OFFSET_CAPTURE);
@@ -397,7 +398,7 @@ final class plan_parser {
      *
      * @param string $code One of the plan_issue code constants.
      * @param int $line Line, from 1.
-     * @param array<string, string> $params Values for a message.
+     * @param string[] $params Values for a message.
      * @return plan_issue
      */
     private static function warning(string $code, int $line, array $params = []): plan_issue {

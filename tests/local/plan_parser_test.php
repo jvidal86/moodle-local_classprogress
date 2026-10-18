@@ -33,10 +33,10 @@ namespace local_classprogress\local;
  * @covers     \local_classprogress\local\plan_issue
  */
 final class plan_parser_test extends \basic_testcase {
-    /** @var array<int, float> Timetable of the edge cases: Monday and Friday, two hours each (Monday = 0). */
+    /** @var float[] Timetable of the edge cases: Monday and Friday, two hours each (Monday = 0). */
     private const TIMETABLE = [0 => 2.0, 4 => 2.0];
 
-    /** @var array<int, float> A class every day, two hours, so that only the checks under test give issues. */
+    /** @var float[] A class every day, two hours, so that only the checks under test give issues. */
     private const EVERY_DAY = [0 => 2.0, 1 => 2.0, 2 => 2.0, 3 => 2.0, 4 => 2.0, 5 => 2.0, 6 => 2.0];
 
     /** @var string A code fence of backticks, written with escapes because phpcs warns on backticks in strings. */
@@ -45,7 +45,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Module headings, with the code and title they give.
      *
-     * @return array<string, array{0: string, 1: ?string, 2: string}>
+     * @return array
      */
     public static function module_heading_provider(): array {
         return [
@@ -188,7 +188,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Block headings and the text they give once a closing run of hashes is removed.
      *
-     * @return array<string, array{0: string, 1: string}>
+     * @return array
      */
     public static function closing_hashes_provider(): array {
         return [
@@ -232,7 +232,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Day headings in every accepted form.
      *
-     * @return array<string, array{0: string, 1: string, 2: string}>
+     * @return array
      */
     public static function day_heading_provider(): array {
         return [
@@ -276,7 +276,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Unreadable or impossible dates.
      *
-     * @return array<string, array{0: string}>
+     * @return array
      */
     public static function unreadable_date_provider(): array {
         return [
@@ -348,7 +348,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Ways to write the hours.
      *
-     * @return array<string, array{0: string, 1: float}>
+     * @return array
      */
     public static function hours_provider(): array {
         return [
@@ -534,7 +534,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Lines that open no fence: backticks in a backtick fence's info text, four spaces or a tab before the fence.
      *
-     * @return array<string, array{0: string}>
+     * @return array
      */
     public static function not_a_fence_provider(): array {
         return [
@@ -749,7 +749,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * School years that are not two ISO dates.
      *
-     * @return array<string, array{0: array}>
+     * @return array
      */
     public static function bad_year_provider(): array {
         return [
@@ -928,7 +928,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * Texts that are not UTF-8 at some line.
      *
-     * @return array<string, array{0: string, 1: int}>
+     * @return array
      */
     public static function not_utf8_provider(): array {
         return [
@@ -962,7 +962,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * The three real plans with the results recorded in fixtures/expected.json.
      *
-     * @return array<string, array{0: string, 1: array<int, float>, 2: string[], 3: array}>
+     * @return array
      */
     public static function real_plan_provider(): array {
         $expected = self::read_json('expected.json');
@@ -985,7 +985,7 @@ final class plan_parser_test extends \basic_testcase {
      * @group REQ-PLN-014
      * @dataProvider real_plan_provider
      * @param string $file Plan file, relative to tests/fixtures.
-     * @param array<int, float> $timetable Weekday to hours.
+     * @param float[] $timetable Weekday to hours.
      * @param string[] $year First and last day of the school year.
      * @param array $expected Expected summary values.
      */
@@ -996,7 +996,7 @@ final class plan_parser_test extends \basic_testcase {
     /**
      * The edge cases with the results recorded in fixtures/cases-expected.json.
      *
-     * @return array<string, array{0: string, 1: ?array, 2: string[], 3: array}>
+     * @return array
      */
     public static function edge_case_provider(): array {
         $schoolyear = self::read_json('expected.json')['school_year'];
@@ -1031,7 +1031,7 @@ final class plan_parser_test extends \basic_testcase {
      * @group REQ-PLN-016
      * @dataProvider edge_case_provider
      * @param string $file Case file, relative to tests/fixtures.
-     * @param array<int, float>|null $timetable Weekday to hours, or null for none.
+     * @param float[]|null $timetable Weekday to hours, or null for none.
      * @param string[] $year First and last day of the school year.
      * @param array $expected Expected summary values.
      */
@@ -1060,7 +1060,7 @@ final class plan_parser_test extends \basic_testcase {
      * Parses a fixture plan with the fixture holidays.
      *
      * @param string $file Plan file, relative to tests/fixtures.
-     * @param array<int, float>|null $timetable Weekday to hours.
+     * @param float[]|null $timetable Weekday to hours.
      * @param string[] $year First and last day of the school year.
      * @return array The summary.
      */
@@ -1073,8 +1073,8 @@ final class plan_parser_test extends \basic_testcase {
      * Parses a plan; by default with the edge-case timetable and no holidays or school year.
      *
      * @param string $text The Markdown plan.
-     * @param array<string, string>|null $holidays ISO date to label.
-     * @param array<int, float>|null $timetable Weekday (Monday = 0) to hours.
+     * @param string[]|null $holidays ISO date to label.
+     * @param float[]|null $timetable Weekday (Monday = 0) to hours.
      * @param string[]|null $year First and last day of the school year.
      * @return plan_result
      */
@@ -1121,7 +1121,7 @@ final class plan_parser_test extends \basic_testcase {
      * Reads a timetable written as in tools/check_plan.py, such as "0:2,4:2".
      *
      * @param string $spec Weekday:hours pairs separated by commas.
-     * @return array<int, float>
+     * @return float[]
      */
     private static function read_timetable(string $spec): array {
         $timetable = [];

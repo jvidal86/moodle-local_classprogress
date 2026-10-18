@@ -90,7 +90,7 @@ function plan_parser_cli_hours(?float $hours): float|string|null {
  * Reads a timetable written as for tools/check_plan.py.
  *
  * @param string|null $spec Weekday:hours pairs such as "0:2,4:2", or "none".
- * @return array<int, float>|null
+ * @return float[]|null
  */
 function plan_parser_cli_timetable(?string $spec): ?array {
     if ($spec === null || $spec === '' || $spec === 'none') {

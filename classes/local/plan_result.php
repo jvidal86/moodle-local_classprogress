@@ -50,8 +50,8 @@ final class plan_result {
      * Hours add up the days' hours, a day without hours counting 0. Errors and warnings are sorted lists of codes
      * that keep duplicates.
      *
-     * @return array{module: ?string, code: ?string, blocks: int, days: int, hours: float, first: ?string,
-     *     last: ?string, errors: string[], warnings: string[]}
+     * @return array Keys module (?string), code (?string), blocks (int), days (int), hours (float), first and last
+     *     (?string, yyyy-mm-dd), errors and warnings (string[]).
      */
     public function summary(): array {
         $hours = 0.0;

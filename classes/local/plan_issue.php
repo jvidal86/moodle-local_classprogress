@@ -77,7 +77,7 @@ final class plan_issue {
      * @param string $level self::ERROR or self::WARNING.
      * @param string $code One of the code constants.
      * @param int $line Line the issue is about, from 1.
-     * @param array<string, string> $params Values for a message, by name (dates are yyyy-mm-dd).
+     * @param string[] $params Values for a message, by name (dates are yyyy-mm-dd).
      */
     public function __construct(
         /** @var string self::ERROR or self::WARNING. */
@@ -86,7 +86,7 @@ final class plan_issue {
         public readonly string $code,
         /** @var int Line the issue is about, from 1. */
         public readonly int $line,
-        /** @var array<string, string> Values for a message, by name (dates are yyyy-mm-dd). */
+        /** @var string[] Values for a message, by name (dates are yyyy-mm-dd). */
         public readonly array $params = [],
     ) {
     }
