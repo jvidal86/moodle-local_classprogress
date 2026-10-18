@@ -29,12 +29,18 @@ final class calendar_result {
      *
      * @param string|null $code Null when the dates are valid; otherwise a calendar constant saying why the result is empty.
      * @param calendar_session[] $sessions The sessions in date order, as a list.
+     * @param float $totalhours Sum of the hours of all sessions.
+     * @param array<string, int> $sessionspermonth yyyy-mm => sessions, for every month from the first to the last class day.
      */
     public function __construct(
         /** @var string|null Null when the dates are valid; otherwise a calendar constant saying why the result is empty. */
         public readonly ?string $code,
         /** @var calendar_session[] The sessions in date order, as a list. */
         public readonly array $sessions,
+        /** @var float Sum of the hours of all sessions. */
+        public readonly float $totalhours,
+        /** @var array<string, int> yyyy-mm => sessions, for every month from the first to the last class day. */
+        public readonly array $sessionspermonth,
     ) {
     }
 }

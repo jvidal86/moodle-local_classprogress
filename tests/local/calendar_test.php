@@ -131,6 +131,89 @@ final class calendar_test extends \basic_testcase {
     }
 
     /**
+     * The calendar gives the number of sessions, the total hours and the sessions of each month.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-002
+     */
+    public function test_totals_give_count_hours_and_sessions_per_month(): void {
+        $holidays = holiday_parser::parse("2026-10-12 Festa Nacional\n2026-11-01 Tots Sants")->entries;
+
+        $result = calendar::compute('2026-09-28', '2026-11-02', [0 => 1.5, 3 => 2], $holidays);
+
+        $this->assertCount(10, $result->sessions);
+        $this->assertSame(17.5, $result->totalhours);
+        $this->assertSame(['2026-09' => 1, '2026-10' => 8, '2026-11' => 1], $result->sessionspermonth);
+    }
+
+    /**
+     * Every month from the first to the last class day is listed, also one without sessions.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-002
+     */
+    public function test_month_without_sessions_is_listed_with_zero(): void {
+        $holidays = holiday_parser::parse('2026-08-01 to 2026-08-31 Estiu')->entries;
+
+        $result = calendar::compute('2026-07-27', '2026-09-14', [0 => 2], $holidays);
+
+        $this->assertSame(['2026-07' => 1, '2026-08' => 0, '2026-09' => 2], $result->sessionspermonth);
+    }
+
+    /**
+     * Total hours are a float even when the timetable gives whole hours as integers.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @group REQ-CAL-002
+     */
+    public function test_total_hours_is_float_for_integer_timetable(): void {
+        $result = calendar::compute('2026-09-14', '2026-09-27', [0 => 2], []);
+
+        $this->assertSame(4.0, $result->totalhours);
+    }
+
+    /**
+     * First and last class days that cannot give a calendar, with the code each must get.
+     *
+     * @return array<string, array{string|null, string|null, string}> First day, last day and expected code.
+     */
+    public static function invalid_range_provider(): array {
+        return [
+            'first missing' => [null, '2027-05-24', calendar::MISSING_DATES],
+            'last empty' => ['2026-09-14', '', calendar::MISSING_DATES],
+            'both missing' => [null, null, calendar::MISSING_DATES],
+            'missing comes before invalid' => [null, 'someday', calendar::MISSING_DATES],
+            'first does not exist' => ['2026-02-30', '2027-05-24', calendar::INVALID_DATE],
+            'last does not exist' => ['2026-09-14', '2027-13-01', calendar::INVALID_DATE],
+            'dd/mm/yyyy is not stored' => ['14/09/2026', '2027-05-24', calendar::INVALID_DATE],
+            'words' => ['2026-09-14', 'end of May', calendar::INVALID_DATE],
+            'trailing newline' => ["2026-09-14\n", '2027-05-24', calendar::INVALID_DATE],
+            'surrounding space' => [' 2026-09-14', '2027-05-24', calendar::INVALID_DATE],
+            'reversed' => ['2027-05-24', '2026-09-14', calendar::LAST_BEFORE_FIRST],
+            'reversed by one day' => ['2026-09-15', '2026-09-14', calendar::LAST_BEFORE_FIRST],
+        ];
+    }
+
+    /**
+     * Missing, invalid or reversed dates give an empty result with a code, not an exception.
+     *
+     * @covers \local_classprogress\local\calendar
+     * @dataProvider invalid_range_provider
+     * @group REQ-CAL-002
+     * @param string|null $first First class day.
+     * @param string|null $last Last class day.
+     * @param string $code Expected code.
+     */
+    public function test_invalid_range_gives_empty_result_with_code(?string $first, ?string $last, string $code): void {
+        $result = calendar::compute($first, $last, [0 => 2, 1 => 2, 2 => 2, 3 => 2, 4 => 2], self::school_holidays());
+
+        $this->assertSame($code, $result->code);
+        $this->assertSame([], $result->sessions);
+        $this->assertSame(0.0, $result->totalhours);
+        $this->assertSame([], $result->sessionspermonth);
+    }
+
+    /**
      * The entries of the school's real holiday file.
      *
      * @return holiday_entry[] The parsed entries.

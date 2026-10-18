@@ -26,27 +26,66 @@ namespace local_classprogress\local;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class calendar {
+    /** @var string Result code: the first or the last class day is not set. */
+    public const MISSING_DATES = 'missing_dates';
+
+    /** @var string Result code: the first or the last class day is not an existing day written yyyy-mm-dd. */
+    public const INVALID_DATE = 'invalid_date';
+
+    /** @var string Result code: the last class day is before the first. */
+    public const LAST_BEFORE_FIRST = 'last_before_first';
+
     /**
      * Computes the sessions of a plan.
+     *
+     * Missing, invalid or reversed dates are checked in that order and give an empty result with the matching code.
      *
      * @param string|null $first First class day, ISO yyyy-mm-dd.
      * @param string|null $last Last class day, ISO yyyy-mm-dd.
      * @param array<int, float> $timetable Weekday => hours, Monday = 0 to Sunday = 6; missing days and hours <= 0 mean no class.
      * @param holiday_entry[] $holidays Holiday entries; when they overlap, the first one owns the day.
-     * @return calendar_result The sessions.
+     * @return calendar_result The sessions and totals, or an empty result with a code.
      */
     public static function compute(?string $first, ?string $last, array $timetable, array $holidays): calendar_result {
+        if ($first === null || $first === '' || $last === null || $last === '') {
+            return new calendar_result(self::MISSING_DATES, [], 0.0, []);
+        }
+        if (!self::is_date($first) || !self::is_date($last)) {
+            return new calendar_result(self::INVALID_DATE, [], 0.0, []);
+        }
+        if ($last < $first) {
+            return new calendar_result(self::LAST_BEFORE_FIRST, [], 0.0, []);
+        }
         $sessions = [];
+        $totalhours = 0.0;
+        $permonth = [];
         $utc = new \DateTimeZone('UTC');
         $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $first, $utc);
         for ($iso = $first; $iso <= $last; $iso = $day->format('Y-m-d')) {
+            $month = substr($iso, 0, 7);
+            $permonth[$month] ??= 0;
             $hours = (float) ($timetable[(int) $day->format('N') - 1] ?? 0);
             if ($hours > 0 && self::holiday_of($iso, $holidays) === null) {
                 $sessions[] = new calendar_session($iso, $hours);
+                $totalhours += $hours;
+                $permonth[$month]++;
             }
             $day = $day->modify('+1 day');
         }
-        return new calendar_result(null, $sessions);
+        return new calendar_result(null, $sessions, $totalhours, $permonth);
+    }
+
+    /**
+     * Tells whether a string is an existing day written exactly yyyy-mm-dd.
+     *
+     * @param string $text The text to check.
+     * @return bool True for an existing day.
+     */
+    private static function is_date(string $text): bool {
+        if (preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/D', $text, $m) !== 1) {
+            return false;
+        }
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
     }
 
     /**
