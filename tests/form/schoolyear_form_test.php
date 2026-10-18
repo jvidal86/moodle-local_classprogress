@@ -40,13 +40,43 @@ final class schoolyear_form_test extends \advanced_testcase {
     /**
      * A new user with a teacher role in a new course, logged in.
      *
+     * @param string $timezone The user's time zone; the server's when empty.
      * @return \stdClass The user.
      */
-    private function teacher(): \stdClass {
+    private function teacher(string $timezone = ''): \stdClass {
         $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $params = $timezone === '' ? null : ['timezone' => $timezone];
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher', $params);
         $this->setUser($user);
         return $user;
+    }
+
+    /**
+     * A day as a browser posts a date selector set to it.
+     *
+     * @param string $day The day, yyyy-mm-dd.
+     * @return array Posted day, month, year, and the tick of an optional selector.
+     */
+    private static function day(string $day): array {
+        [$year, $month, $mday] = array_map('intval', explode('-', $day));
+        return ['enabled' => 1, 'day' => $mday, 'month' => $month, 'year' => $year];
+    }
+
+    /**
+     * The day a date selector of a rendered form shows.
+     *
+     * @param string $html The rendered form.
+     * @param string $name The element name.
+     * @return string The day, yyyy-mm-dd.
+     */
+    private static function shown(string $html, string $name): string {
+        $part = function (string $part) use ($html, $name): int {
+            $select = '~<select[^>]*name="' . preg_quote("{$name}[{$part}]", '~') . '"[^>]*>(.*?)</select>~s';
+            preg_match($select, $html, $options);
+            preg_match('~<option value="(\d+)" selected~', $options[1] ?? '', $selected);
+            return (int) ($selected[1] ?? 0);
+        };
+        return sprintf('%04d-%02d-%02d', $part('year'), $part('month'), $part('day'));
     }
 
     /**
@@ -58,13 +88,14 @@ final class schoolyear_form_test extends \advanced_testcase {
     private static function post(array $fields = []): array {
         return array_merge([
             'name' => 'Curs 2026-2027',
-            'startdate' => '2026-09-14',
-            'enddate' => '2027-06-21',
+            'startdate' => self::day('2026-09-14'),
+            'enddate' => self::day('2027-06-21'),
             'holidays' => self::HOLIDAYS,
             'evaluationrows' => 3,
+            // A browser posts nothing for an optional date selector left disabled.
             'evalname' => ['1a avaluació', '', ''],
-            'evalstartdate' => ['2026-09-14', '', ''],
-            'evalenddate' => ['2026-12-21', '', ''],
+            'evalstartdate' => [self::day('2026-09-14')],
+            'evalenddate' => [self::day('2026-12-21')],
         ], $fields);
     }
 
@@ -132,7 +163,7 @@ final class schoolyear_form_test extends \advanced_testcase {
     public function test_form_carries_the_version_it_was_opened_on(): void {
         $this->resetAfterTest();
         $user = $this->teacher();
-        $id = schoolyear_service::create($user->id, schoolyear_form::to_service_data((object) self::post()));
+        $id = schoolyear_service::create($user->id, schoolyear_form::to_service_data(self::submit(self::post())));
         $year = schoolyear_service::get($user->id, $id);
         $opened = (array) schoolyear_form::from_record(
             $year,
@@ -143,7 +174,7 @@ final class schoolyear_form_test extends \advanced_testcase {
 
         $tab1 = (object) array_merge($opened, ['name' => 'Tab 1']);
         schoolyear_service::update($user->id, $id, schoolyear_form::to_service_data($tab1));
-        $stale = self::submit(['name' => 'Tab 2', 'evaluationrows' => 3] + $opened, 1);
+        $stale = self::submit(self::post(['id' => $id, 'timemodified' => $opened['timemodified'], 'name' => 'Tab 2']), 1);
 
         $this->assertSame((int) $year->timemodified, schoolyear_form::to_service_data($stale)->timemodified);
         try {
@@ -201,5 +232,109 @@ final class schoolyear_form_test extends \advanced_testcase {
 
         // Moodle puts the element's classes on the row around the box, whose font the box takes.
         $this->assertMatchesRegularExpression('~id="fitem_id_holidays" class="[^"]*\btext-monospace font-monospace\b~', $html);
+    }
+
+    /**
+     * Days where a date could move by one: daylight saving changes, a midnight that does not exist, zones far from UTC,
+     * and the first and last days a teacher may enter.
+     *
+     * @return array Case => [user time zone, day].
+     */
+    public static function day_cases(): array {
+        return [
+            'Madrid, clocks go forward' => ['Europe/Madrid', '2026-03-29'],
+            'Madrid, clocks go back' => ['Europe/Madrid', '2026-10-25'],
+            'Santiago, the day starts at 01:00' => ['America/Santiago', '2026-09-06'],
+            'Kiritimati, UTC+14' => ['Pacific/Kiritimati', '2026-09-14'],
+            'Pago Pago, UTC-11' => ['Pacific/Pago_Pago', '2026-09-14'],
+            'first day allowed' => ['Pacific/Kiritimati', '2000-01-01'],
+            'last day allowed' => ['Pacific/Pago_Pago', '2099-12-31'],
+        ];
+    }
+
+    /**
+     * The day picked in a date selector is the day the service gets, in the teacher's time zone.
+     *
+     * @dataProvider day_cases
+     * @group REQ-CAL-004
+     * @param string $timezone User time zone.
+     * @param string $day The day.
+     */
+    public function test_picked_day_is_the_day_saved(string $timezone, string $day): void {
+        $this->resetAfterTest();
+        $this->teacher($timezone);
+
+        $data = self::submit(self::post([
+            'startdate' => self::day($day),
+            'enddate' => self::day($day),
+            'holidays' => '',
+            'evalstartdate' => [self::day($day)],
+            'evalenddate' => [self::day($day)],
+        ]));
+
+        $this->assertNotNull($data);
+        $yeardata = schoolyear_form::to_service_data($data);
+        $this->assertSame([$day, $day], [$yeardata->startdate, $yeardata->enddate]);
+        $evaluation = (object) ['name' => '1a avaluació', 'startdate' => $day, 'enddate' => $day];
+        $this->assertEquals([0 => $evaluation], $yeardata->evaluations);
+    }
+
+    /**
+     * A stored day is the day the date selector shows, in the teacher's time zone.
+     *
+     * @dataProvider day_cases
+     * @group REQ-CAL-004
+     * @param string $timezone User time zone.
+     * @param string $day The day.
+     */
+    public function test_stored_day_is_the_day_shown(string $timezone, string $day): void {
+        $this->resetAfterTest();
+        $this->teacher($timezone);
+        $year = (object) ['id' => 0, 'timemodified' => 0, 'name' => 'Curs', 'startdate' => $day, 'enddate' => $day];
+        $evaluation = (object) ['name' => '1a avaluació', 'startdate' => $day, 'enddate' => $day];
+
+        $form = new schoolyear_form(new \moodle_url('/local/classprogress/schoolyear.php'), ['evaluationcount' => 1]);
+        $form->set_data(schoolyear_form::from_record($year, [], [$evaluation]));
+        $html = $form->render();
+
+        foreach (['startdate', 'enddate', 'evalstartdate[0]', 'evalenddate[0]'] as $name) {
+            $this->assertSame($day, self::shown($html, $name), $name);
+        }
+    }
+
+    /**
+     * The date selectors offer the years 2000 to 2099 only; those of an evaluation row can be left disabled.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_date_selectors_offer_the_years_a_teacher_may_enter(): void {
+        $this->resetAfterTest();
+        $this->teacher();
+
+        $html = (new schoolyear_form(new \moodle_url('/local/classprogress/schoolyear.php'), ['evaluationcount' => 0]))->render();
+
+        foreach (['startdate', 'enddate', 'evalstartdate[0]', 'evalenddate[2]'] as $name) {
+            preg_match('~<select[^>]*name="' . preg_quote("{$name}[year]", '~') . '"[^>]*>(.*?)</select>~s', $html, $select);
+            preg_match_all('~<option value="(\d+)"~', $select[1] ?? '', $years);
+            $this->assertSame(array_map('strval', range(2000, 2099)), $years[1], $name);
+        }
+        $this->assertStringContainsString('name="evalstartdate[0][enabled]"', $html);
+        $this->assertStringNotContainsString('name="startdate[enabled]"', $html);
+    }
+
+    /**
+     * A named evaluation row whose dates were left disabled is refused, with a message that says what to do.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_named_row_without_dates_asks_for_them(): void {
+        $this->resetAfterTest();
+        $this->teacher();
+        schoolyear_form::mock_submit(self::post(['evalname' => ['1a avaluació', '2a avaluació', '']]));
+
+        $form = new schoolyear_form(new \moodle_url('/local/classprogress/schoolyear.php'), ['evaluationcount' => 0]);
+
+        $this->assertNull($form->get_data());
+        $this->assertStringContainsString(get_string('error_baddate', 'local_classprogress'), $form->render());
     }
 }

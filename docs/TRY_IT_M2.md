@@ -7,9 +7,9 @@ The files below are in this repository: `test-data/holidays-centre-2026-27.txt` 
 
 ## 1. School year
 1. Click **Class progress** in the top bar, then **New school year**.
-2. Name `2026-2027`, first day `2026-09-14`, last day `2027-06-21`.
+2. Name `2026-2027`, first day 14 September 2026, last day 21 June 2027 (pick them in the day, month and year menus or with the calendar button).
 3. In **Holidays and non-teaching days**, paste the whole content of `test-data/holidays-centre-2026-27.txt` (comment lines starting with `#` are fine).
-4. Optional: **Evaluation periods** `1a avaluació` 2026-09-14 to 2026-11-27, `2a` 2026-11-30 to 2027-02-26, `3a` 2027-03-01 to 2027-06-21.
+4. Optional: **Evaluation periods** `1a avaluació` 2026-09-14 to 2026-11-27, `2a` 2026-11-30 to 2027-02-26, `3a` 2027-03-01 to 2027-06-21 (tick **Enable** next to each date first).
 5. Save. Try once a deliberate typo in a holiday line, for example `2026-12-22 to 2027-1-07 Nadal`: the whole text should be refused, with that line named.
 
 ## 2. Plan

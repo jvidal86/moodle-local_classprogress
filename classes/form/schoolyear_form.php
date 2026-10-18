@@ -53,7 +53,6 @@ class schoolyear_form extends \moodleform {
     #[\Override]
     protected function definition(): void {
         $mform = $this->_form;
-        $date = ['size' => 10, 'maxlength' => 10, 'placeholder' => get_string('dateformat', 'local_classprogress')];
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
@@ -71,13 +70,9 @@ class schoolyear_form extends \moodleform {
             'client'
         );
 
-        $mform->addElement('text', 'startdate', get_string('startdate', 'local_classprogress'), $date);
-        $mform->setType('startdate', PARAM_TEXT);
-        $mform->addRule('startdate', null, 'required', null, 'client');
-
-        $mform->addElement('text', 'enddate', get_string('enddate', 'local_classprogress'), $date);
-        $mform->setType('enddate', PARAM_TEXT);
-        $mform->addRule('enddate', null, 'required', null, 'client');
+        // A date selector always has a day, so the dates of the school year need no "required" rule.
+        $mform->addElement('date_selector', 'startdate', get_string('startdate', 'local_classprogress'), date_field::options());
+        $mform->addElement('date_selector', 'enddate', get_string('enddate', 'local_classprogress'), date_field::options());
 
         $mform->addElement(
             'textarea',
@@ -90,17 +85,17 @@ class schoolyear_form extends \moodleform {
 
         $mform->addElement('header', 'evaluationsheader', get_string('evaluations', 'local_classprogress'));
         $mform->addElement('static', 'evaluationsintro', '', get_string('evaluationsintro', 'local_classprogress'));
+        $optional = date_field::options(true);
         $row = [
             $mform->createElement('text', 'evalname', get_string('evaluationname', 'local_classprogress'), ['size' => 20]),
-            $mform->createElement('text', 'evalstartdate', get_string('startdate', 'local_classprogress'), $date),
-            $mform->createElement('text', 'evalenddate', get_string('enddate', 'local_classprogress'), $date),
+            // Optional, so that a row left untouched has no dates and is left out.
+            $mform->createElement('date_selector', 'evalstartdate', get_string('startdate', 'local_classprogress'), $optional),
+            $mform->createElement('date_selector', 'evalenddate', get_string('enddate', 'local_classprogress'), $optional),
         ];
         $group = $mform->createElement('group', 'evaluation', get_string('evaluation', 'local_classprogress'), $row, ' ', false);
         $rows = max(self::MIN_EVALUATION_ROWS, (int) ($this->_customdata['evaluationcount'] ?? 0));
         $this->repeat_elements([$group], $rows, [
             'evalname' => ['type' => PARAM_RAW_TRIMMED],
-            'evalstartdate' => ['type' => PARAM_TEXT],
-            'evalenddate' => ['type' => PARAM_TEXT],
         ], 'evaluationrows', 'addevaluation', 1, get_string('addevaluation', 'local_classprogress'), true);
 
         $this->add_action_buttons();
@@ -159,22 +154,22 @@ class schoolyear_form extends \moodleform {
     /**
      * Turns submitted form data into school year data for the service; empty evaluation rows are left out.
      *
-     * @param \stdClass $formdata Data from get_data() or validation().
+     * @param \stdClass $formdata Data from get_data() or validation(), with dates as date_selector timestamps.
      * @return \stdClass School year data, with evaluations keyed by form row and the version the form was opened on.
      */
     public static function to_service_data(\stdClass $formdata): \stdClass {
         $evaluations = [];
         foreach ($formdata->evalname ?? [] as $row => $name) {
-            $start = trim($formdata->evalstartdate[$row] ?? '');
-            $end = trim($formdata->evalenddate[$row] ?? '');
+            $start = date_field::to_day((int) ($formdata->evalstartdate[$row] ?? 0));
+            $end = date_field::to_day((int) ($formdata->evalenddate[$row] ?? 0));
             if (trim($name) !== '' || $start !== '' || $end !== '') {
                 $evaluations[$row] = (object) ['name' => $name, 'startdate' => $start, 'enddate' => $end];
             }
         }
         return (object) [
             'name' => $formdata->name ?? '',
-            'startdate' => trim($formdata->startdate ?? ''),
-            'enddate' => trim($formdata->enddate ?? ''),
+            'startdate' => date_field::to_day((int) ($formdata->startdate ?? 0)),
+            'enddate' => date_field::to_day((int) ($formdata->enddate ?? 0)),
             'holidays' => $formdata->holidays ?? '',
             'evaluations' => $evaluations,
             'timemodified' => (int) ($formdata->timemodified ?? 0),
@@ -187,21 +182,21 @@ class schoolyear_form extends \moodleform {
      * @param \stdClass $year School year row.
      * @param \local_classprogress\local\holiday_entry[] $holidays Its holidays.
      * @param \stdClass[] $evaluations Its evaluation periods.
-     * @return \stdClass Data for set_data().
+     * @return \stdClass Data for set_data(), with dates as date_selector timestamps.
      */
     public static function from_record(\stdClass $year, array $holidays, array $evaluations): \stdClass {
         $data = (object) [
             'id' => $year->id,
             'timemodified' => $year->timemodified,
             'name' => $year->name,
-            'startdate' => $year->startdate,
-            'enddate' => $year->enddate,
+            'startdate' => date_field::to_timestamp($year->startdate),
+            'enddate' => date_field::to_timestamp($year->enddate),
             'holidays' => schoolyear_service::holidays_to_text($holidays),
         ];
         foreach (array_values($evaluations) as $row => $evaluation) {
             $data->evalname[$row] = $evaluation->name;
-            $data->evalstartdate[$row] = $evaluation->startdate;
-            $data->evalenddate[$row] = $evaluation->enddate;
+            $data->evalstartdate[$row] = date_field::to_timestamp($evaluation->startdate);
+            $data->evalenddate[$row] = date_field::to_timestamp($evaluation->enddate);
         }
         return $data;
     }

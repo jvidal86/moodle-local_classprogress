@@ -32,13 +32,43 @@ final class plan_form_test extends \advanced_testcase {
      * A new user with a teacher role in a course, logged in.
      *
      * @param \stdClass|null $course The course; a new one when null.
+     * @param string $timezone The user's time zone; the server's when empty.
      * @return \stdClass The user.
      */
-    private function teacher(?\stdClass $course = null): \stdClass {
+    private function teacher(?\stdClass $course = null, string $timezone = ''): \stdClass {
         $course ??= $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $params = $timezone === '' ? null : ['timezone' => $timezone];
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher', $params);
         $this->setUser($user);
         return $user;
+    }
+
+    /**
+     * A day as a browser posts a date selector set to it.
+     *
+     * @param string $day The day, yyyy-mm-dd.
+     * @return array Posted tick, day, month and year.
+     */
+    private static function day(string $day): array {
+        [$year, $month, $mday] = array_map('intval', explode('-', $day));
+        return ['enabled' => 1, 'day' => $mday, 'month' => $month, 'year' => $year];
+    }
+
+    /**
+     * Form data for set_data() as a browser posts it back unchanged: a disabled date selector posts nothing.
+     *
+     * @param \stdClass $data Data from from_record().
+     * @return array Posted fields.
+     */
+    private static function posted(\stdClass $data): array {
+        $post = (array) $data;
+        foreach (['startdate', 'enddate'] as $name) {
+            unset($post[$name]);
+            if ($data->$name) {
+                $post[$name] = self::day(date_field::to_day($data->$name));
+            }
+        }
+        return $post;
     }
 
     /**
@@ -89,8 +119,8 @@ final class plan_form_test extends \advanced_testcase {
             'courseid' => 0,
             'modulecode' => 'MP<03>',
             'moduletitle' => 'Programació <C++> i Java & més',
-            'startdate' => '2026-09-14',
-            'enddate' => '2027-06-21',
+            'startdate' => self::day('2026-09-14'),
+            'enddate' => self::day('2027-06-21'),
             'hours0' => '2',
         ]);
         $this->assertNotNull($data);
@@ -120,7 +150,8 @@ final class plan_form_test extends \advanced_testcase {
         $plan = plan_service::get($user->id, $id);
 
         $options = plan_form::course_options($user->id, $plan);
-        $data = self::submit($user->id, (array) plan_form::from_record($plan, plan_service::timetable($user->id, $id)), $plan);
+        $opened = plan_form::from_record($plan, plan_service::timetable($user->id, $id));
+        $data = self::submit($user->id, self::posted($opened), $plan);
         $this->assertNotNull($data);
         plan_service::update($user->id, $id, plan_form::to_service_data($data));
 
@@ -142,8 +173,62 @@ final class plan_form_test extends \advanced_testcase {
         ]);
         $plan = plan_service::get($user->id, $id);
 
-        $data = self::submit($user->id, (array) plan_form::from_record($plan, []), $plan);
+        $data = self::submit($user->id, self::posted(plan_form::from_record($plan, [])), $plan);
 
         $this->assertSame((int) $plan->timemodified, plan_form::to_service_data($data)->timemodified);
+    }
+
+    /**
+     * Class days left disabled give the service no dates, and a plan without them opens with them disabled.
+     *
+     * @group REQ-CAL-002
+     * @group REQ-CAL-004
+     */
+    public function test_class_days_can_be_left_out(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher();
+        $yearid = self::year($user->id);
+
+        $data = self::submit($user->id, ['schoolyearid' => $yearid, 'courseid' => 0, 'moduletitle' => 'Programació']);
+        $this->assertNotNull($data);
+        $plandata = plan_form::to_service_data($data);
+        $this->assertSame(['', ''], [$plandata->startdate, $plandata->enddate]);
+        $id = plan_service::create($user->id, $plandata);
+
+        $plan = plan_service::get($user->id, $id);
+        $form = new plan_form(new \moodle_url('/local/classprogress/plan.php'), [
+            'userid' => $user->id,
+            'years' => [$yearid => 'Curs 2026-2027'],
+            'courses' => [],
+        ]);
+        $form->set_data(plan_form::from_record($plan, []));
+        $html = $form->render();
+        foreach (['startdate', 'enddate'] as $name) {
+            preg_match('~<input[^>]*name="' . $name . '\[enabled\]"[^>]*>~', $html, $checkbox);
+            $this->assertStringNotContainsString('checked', $checkbox[0] ?? 'missing', $name);
+        }
+    }
+
+    /**
+     * Class days picked far from UTC are the days saved.
+     *
+     * @group REQ-CAL-004
+     */
+    public function test_class_days_keep_their_day_far_from_utc(): void {
+        $this->resetAfterTest();
+        $user = $this->teacher(null, 'Pacific/Kiritimati');
+        $yearid = self::year($user->id);
+
+        $data = self::submit($user->id, [
+            'schoolyearid' => $yearid,
+            'courseid' => 0,
+            'moduletitle' => 'Programació',
+            'startdate' => self::day('2026-09-14'),
+            'enddate' => self::day('2027-06-21'),
+        ]);
+        $this->assertNotNull($data);
+        $id = plan_service::create($user->id, plan_form::to_service_data($data));
+        $plan = plan_service::get($user->id, $id);
+        $this->assertSame(['2026-09-14', '2027-06-21'], [$plan->startdate, $plan->enddate]);
     }
 }

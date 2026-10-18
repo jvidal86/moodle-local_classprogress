@@ -23,12 +23,12 @@ Feature: Set up a school year and a plan
     And I should see "You have no school years yet."
     When I click on "New school year" "link"
     And I set the following fields to these values:
-      | Name      | Curs 2026-2027 |
-      | First day | 2026-09-14     |
-      | Last day  | 2027-06-21     |
-      | evalname[0]      | 1a avaluació |
-      | evalstartdate[0] | 2026-09-14   |
-      | evalenddate[0]   | 2026-11-27   |
+      | Name             | Curs 2026-2027        |
+      | First day        | ##14 September 2026## |
+      | Last day         | ##21 June 2027##      |
+      | evalname[0]      | 1a avaluació          |
+      | evalstartdate[0] | ##14 September 2026## |
+      | evalenddate[0]   | ##27 November 2026##  |
     And I set the field "Holidays and non-teaching days" to multiline:
       """
       # Calendar of the school
@@ -54,8 +54,8 @@ Feature: Set up a school year and a plan
     And I set the following fields to these values:
       | Module code      | MP 0372                  |
       | Module title     | Gestió de bases de dades |
-      | First class day  | 2026-09-14               |
-      | Last class day   | 2026-11-27               |
+      | First class day  | ##14 September 2026##    |
+      | Last class day   | ##27 November 2026##     |
       | Monday           | 2                        |
       | Friday           | 2                        |
     And I press "Save changes"
@@ -76,9 +76,9 @@ Feature: Set up a school year and a plan
     Given I am on the "local_classprogress > Home" page logged in as "teacher1"
     And I click on "New school year" "link"
     And I set the following fields to these values:
-      | Name      | Curs <2026> & co |
-      | First day | 2026-09-14       |
-      | Last day  | 2027-06-21       |
+      | Name      | Curs <2026> & co      |
+      | First day | ##14 September 2026## |
+      | Last day  | ##21 June 2027##      |
     And I set the field "Holidays and non-teaching days" to multiline:
       """
       2026-12-07 Pont <- Immaculada
@@ -91,8 +91,8 @@ Feature: Set up a school year and a plan
     And I set the following fields to these values:
       | Module code     | MP<03>                   |
       | Module title    | Programació <C++> i Java |
-      | First class day | 2026-12-01               |
-      | Last class day  | 2026-12-15               |
+      | First class day | ##1 December 2026##      |
+      | Last class day  | ##15 December 2026##     |
       | Monday          | 2                        |
       | Tuesday         | 2                        |
     And I press "Save changes"
@@ -133,9 +133,9 @@ Feature: Set up a school year and a plan
     Given I am on the "local_classprogress > Home" page logged in as "teacher1"
     And I click on "New school year" "link"
     And I set the following fields to these values:
-      | Name      | Curs de l'Anna |
-      | First day | 2026-09-14     |
-      | Last day  | 2027-06-21     |
+      | Name      | Curs de l'Anna        |
+      | First day | ##14 September 2026## |
+      | Last day  | ##21 June 2027##      |
     And I press "Save changes"
     And I click on "New plan" "link"
     And I set the following fields to these values:

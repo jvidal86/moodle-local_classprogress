@@ -26,6 +26,7 @@
 
 use core\output\notification;
 use local_classprogress\form\approve_form;
+use local_classprogress\form\date_field;
 use local_classprogress\form\plan_form;
 use local_classprogress\local\plan_issue;
 use local_classprogress\local\plan_service;
@@ -182,7 +183,11 @@ if ($plan && !$stale) {
     $form->set_data(plan_form::from_record($plan, plan_service::timetable($USER->id, $id)));
 } else if (!$plan && isset($years[$schoolyearid])) {
     $year = schoolyear_service::get($USER->id, $schoolyearid);
-    $form->set_data(['schoolyearid' => $schoolyearid, 'startdate' => $year->startdate, 'enddate' => $year->enddate]);
+    $form->set_data([
+        'schoolyearid' => $schoolyearid,
+        'startdate' => date_field::to_timestamp($year->startdate),
+        'enddate' => date_field::to_timestamp($year->enddate),
+    ]);
 }
 
 echo $OUTPUT->header();

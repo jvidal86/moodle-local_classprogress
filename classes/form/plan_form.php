@@ -47,7 +47,6 @@ class plan_form extends \moodleform {
     #[\Override]
     protected function definition(): void {
         $mform = $this->_form;
-        $date = ['size' => 10, 'maxlength' => 10, 'placeholder' => get_string('dateformat', 'local_classprogress')];
 
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
@@ -89,12 +88,10 @@ class plan_form extends \moodleform {
             'client'
         );
 
-        $mform->addElement('text', 'startdate', get_string('firstclassday', 'local_classprogress'), $date);
-        $mform->setType('startdate', PARAM_TEXT);
+        $optional = date_field::options(true);
+        $mform->addElement('date_selector', 'startdate', get_string('firstclassday', 'local_classprogress'), $optional);
         $mform->addHelpButton('startdate', 'firstclassday', 'local_classprogress');
-
-        $mform->addElement('text', 'enddate', get_string('lastclassday', 'local_classprogress'), $date);
-        $mform->setType('enddate', PARAM_TEXT);
+        $mform->addElement('date_selector', 'enddate', get_string('lastclassday', 'local_classprogress'), $optional);
 
         $mform->addElement('header', 'timetableheader', get_string('timetable', 'local_classprogress'));
         $mform->setExpanded('timetableheader');
@@ -134,7 +131,7 @@ class plan_form extends \moodleform {
     /**
      * Turns submitted form data into plan data for the service.
      *
-     * @param \stdClass $formdata Data from get_data() or validation().
+     * @param \stdClass $formdata Data from get_data() or validation(), with dates as date_selector timestamps.
      * @return \stdClass Plan data, with the version the form was opened on.
      */
     public static function to_service_data(\stdClass $formdata): \stdClass {
@@ -147,8 +144,8 @@ class plan_form extends \moodleform {
             'courseid' => (int) ($formdata->courseid ?? 0),
             'modulecode' => $formdata->modulecode ?? '',
             'moduletitle' => $formdata->moduletitle ?? '',
-            'startdate' => trim($formdata->startdate ?? ''),
-            'enddate' => trim($formdata->enddate ?? ''),
+            'startdate' => date_field::to_day((int) ($formdata->startdate ?? 0)),
+            'enddate' => date_field::to_day((int) ($formdata->enddate ?? 0)),
             'timetable' => $timetable,
             'timemodified' => (int) ($formdata->timemodified ?? 0),
         ];
@@ -184,7 +181,7 @@ class plan_form extends \moodleform {
      *
      * @param \stdClass $plan Plan row.
      * @param float[] $timetable Its timetable, weekday => hours.
-     * @return \stdClass Data for set_data().
+     * @return \stdClass Data for set_data(), with dates as date_selector timestamps.
      */
     public static function from_record(\stdClass $plan, array $timetable): \stdClass {
         $data = (object) [
@@ -194,8 +191,8 @@ class plan_form extends \moodleform {
             'courseid' => $plan->courseid ?? 0,
             'modulecode' => $plan->modulecode,
             'moduletitle' => $plan->moduletitle,
-            'startdate' => $plan->startdate ?? '',
-            'enddate' => $plan->enddate ?? '',
+            'startdate' => date_field::to_timestamp($plan->startdate ?? null),
+            'enddate' => date_field::to_timestamp($plan->enddate ?? null),
         ];
         foreach (array_keys(self::WEEKDAYS) as $weekday) {
             $data->{'hours' . $weekday} = $timetable[$weekday] ?? 0;
