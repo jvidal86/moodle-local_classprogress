@@ -207,13 +207,12 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $this->create_teacher_data($teacher2, 'T2');
         $gen->create_schoolyear(['userid' => $yearonly->id]);
 
-        $this->assertSame([\context_user::instance($teacher1->id)->id],
-            provider::get_contexts_for_userid($teacher1->id)->get_contextids());
-        $this->assertSame([\context_user::instance($yearonly->id)->id],
-            provider::get_contexts_for_userid($yearonly->id)->get_contextids());
-        $this->assertSame([], provider::get_contexts_for_userid($nobody->id)->get_contextids());
+        $contextids = fn(int $userid): array => array_map('intval', provider::get_contexts_for_userid($userid)->get_contextids());
+        $this->assertSame([(int) \context_user::instance($teacher1->id)->id], $contextids($teacher1->id));
+        $this->assertSame([(int) \context_user::instance($yearonly->id)->id], $contextids($yearonly->id));
+        $this->assertSame([], $contextids($nobody->id));
         // The admin who changed an entry while logged in as a teacher owns nothing here.
-        $this->assertSame([], provider::get_contexts_for_userid(get_admin()->id)->get_contextids());
+        $this->assertSame([], $contextids(get_admin()->id));
     }
 
     /**
@@ -294,7 +293,7 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
 
         $this->assertCount(5, $plan->history);
         $actions = array_map(fn($row) => [$row->entryid, $row->action], $plan->history);
-        $this->assertContains([$ids['gone'], 'delete'], $actions);
+        $this->assertContains([(int) $ids['gone'], 'delete'], $actions);
         $loggedinas = array_values(array_filter($plan->history, fn($row) => $row->realuserid !== null));
         $this->assertCount(1, $loggedinas);
         $this->assertSame((int) get_admin()->id, $loggedinas[0]->realuserid);
@@ -362,8 +361,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $ids1 = $this->create_teacher_data($teacher1, 'T1');
         $ids2 = $this->create_teacher_data($teacher2, 'T2');
 
-        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT,
-            [\context_user::instance($teacher1->id)->id]));
+        $contextids = [\context_user::instance($teacher1->id)->id];
+        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT, $contextids));
 
         $this->assert_all_deleted($ids1);
         $this->assert_all_kept($ids2);
@@ -381,8 +380,8 @@ final class provider_test extends \core_privacy\tests\provider_testcase {
         $ids1 = $this->create_teacher_data($teacher1, 'T1');
         $ids2 = $this->create_teacher_data($teacher2, 'T2');
 
-        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT,
-            [\context_user::instance($teacher2->id)->id, \context_system::instance()->id]));
+        $contextids = [\context_user::instance($teacher2->id)->id, \context_system::instance()->id];
+        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT, $contextids));
 
         $this->assert_all_kept($ids1);
         $this->assert_all_kept($ids2);
