@@ -180,4 +180,60 @@ final class holiday_parser_test extends \basic_testcase {
         $this->assertSame([], $result->errors);
         $this->assertSame('2028-02-29', $result->entries[0]->start);
     }
+
+    /**
+     * Expanding lists every day of each period, across a year end, with its label.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-HOL-001
+     */
+    public function test_expand_lists_every_day_of_each_period(): void {
+        $entries = holiday_parser::parse("2026-12-30 to 2027-01-02 Nadal\n2027-02-01")->entries;
+
+        $this->assertSame([
+            '2026-12-30' => 'Nadal',
+            '2026-12-31' => 'Nadal',
+            '2027-01-01' => 'Nadal',
+            '2027-01-02' => 'Nadal',
+            '2027-02-01' => '',
+        ], holiday_parser::expand($entries));
+    }
+
+    /**
+     * On overlapping entries the first line keeps the day; the days come out sorted by date.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-HOL-001
+     */
+    public function test_expand_first_entry_wins_on_overlap_and_days_are_sorted(): void {
+        $text = "2026-12-22 to 2026-12-24 Nadal\n2026-12-01 Earlier\n2026-12-23 to 2026-12-26 Overlap";
+
+        $days = holiday_parser::expand(holiday_parser::parse($text)->entries);
+
+        $this->assertSame([
+            '2026-12-01' => 'Earlier',
+            '2026-12-22' => 'Nadal',
+            '2026-12-23' => 'Nadal',
+            '2026-12-24' => 'Nadal',
+            '2026-12-25' => 'Overlap',
+            '2026-12-26' => 'Overlap',
+        ], $days);
+    }
+
+    /**
+     * The school's real holiday file expands to exactly the days the Python reference parser gives.
+     *
+     * @covers \local_classprogress\local\holiday_parser
+     * @group REQ-HOL-001
+     */
+    public function test_school_holiday_file_matches_reference_parser(): void {
+        $text = file_get_contents(__DIR__ . '/../fixtures/holidays-centre-2026-27.txt');
+        $expected = json_decode(file_get_contents(__DIR__ . '/../fixtures/holidays-expanded.json'), true);
+
+        $result = holiday_parser::parse($text);
+
+        $this->assertSame([], $result->errors);
+        $this->assertCount(39, $expected);
+        $this->assertSame($expected, holiday_parser::expand($result->entries));
+    }
 }

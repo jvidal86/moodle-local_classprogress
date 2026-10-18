@@ -76,6 +76,28 @@ final class holiday_parser {
     }
 
     /**
+     * Lists every holiday day of the given entries with its label.
+     *
+     * When entries overlap, the first one in the list keeps the day, as in the Python reference.
+     *
+     * @param holiday_entry[] $entries Entries, usually holiday_parse_result::$entries.
+     * @return array<string, string> ISO date => label, sorted by date.
+     */
+    public static function expand(array $entries): array {
+        $days = [];
+        $utc = new \DateTimeZone('UTC');
+        foreach ($entries as $entry) {
+            $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $entry->start, $utc);
+            for ($iso = $entry->start; $iso <= $entry->end; $iso = $day->format('Y-m-d')) {
+                $days[$iso] ??= $entry->label;
+                $day = $day->modify('+1 day');
+            }
+        }
+        ksort($days, SORT_STRING);
+        return $days;
+    }
+
+    /**
      * Writes a date as ISO yyyy-mm-dd, if it exists.
      *
      * @param string $date A date matched by {@see self::DATE}.
