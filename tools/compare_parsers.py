@@ -4,7 +4,7 @@
 Both parsers read the same inputs and their results are compared: the summary (the keys of summarize()) and the
 detail (module; blocks; every day's date, hours, title, block, line and content; every issue's level, code and line).
 
-    python3 tools/compare_parsers.py                      # fixtures, edge probes, 1000 random plans, known divergences
+    python3 tools/compare_parsers.py                      # fixtures, edge probes and 1000 random plans
     python3 tools/compare_parsers.py --count 5000 --seed 7
     python3 tools/compare_parsers.py --only 412           # just random plan 412 of the seed, printed in full
     python3 tools/compare_parsers.py --save /tmp/diffs    # also write every differing random plan to a file
@@ -13,12 +13,13 @@ detail (module; blocks; every day's date, hours, title, block, line and content;
 Sections
     fixtures           tests/fixtures/plans/*.md and cases/*.md through the CLI's file mode, inputs as in the selftest
     edge probes        fixed inputs that each stress one rule; the parsers must agree
-    random             seeded random plans through the CLI's JSON-lines mode: headings of levels 1 to 7, valid and
-                       invalid dates in both formats, weekday prefixes, hours, fences, empty days, every line break the
-                       reference knows, long lines and runs of spaces, Catalan and other Unicode text; must agree
-    known divergences  inputs where the PHP parser differs on purpose, because the reference contradicts the
-                       requirements; each must still differ
-Exit 1 when an input that must agree differs, or a known divergence no longer differs.
+    random             seeded random plans through the CLI's JSON-lines mode: headings of levels 1 to 7 with and
+                       without closing hashes, valid and invalid dates in both formats and in other digits, weekday
+                       words in any case and look-alike letters, hours, code fences of both kinds (inline, indented,
+                       longer closers, unclosed), empty days, LF/CRLF/CR and other line-like characters, a leading BOM,
+                       long lines and runs of spaces, Catalan and other Unicode text; must agree
+Exit 1 when any input gives different results. Bytes that are not UTF-8 (error not_utf8) cannot reach the reference,
+which reads text, so they are tested in tests/local/plan_parser_test.php only.
 """
 import argparse
 import datetime as dt
@@ -146,26 +147,35 @@ CATALAN = ("Presentació del mòdul i avaluació inicial Instal·lació de l'IDE
            "Exercicis d'àlgebra relacional Gestió de bases de dades Còpia de seguretat Lliurament del projecte "
            "Revisió de l'examen façana Sessió teòrica Administració de sistemes operatius Identitats el servei "
            "de directori L'entorn de treball Neix el domini Organitzar LDAP per dins Polítiques de grup").split()
-OTHER = ["niño", "año", "naïve", "Ελληνικά", "日本語", "中文", "русский", "عربى", "עברית", "🎓", "👩‍🏫", "é", "ﬁ",
-         "Ⅻ", "½", "²", "٢", "MP٠٣", "​", "­", "⁠", "\x00", "\x1f", "᠎", "﻿", "C#", "F#",
+OTHER = ["niño", "año", "naïve", "Ελληνικά", "日本語", "中文", "русский", "عربى", "עברית", "🎓", "👩\u200d🏫", "é", "ﬁ",
+         "Ⅻ", "½", "²", "٢", "MP٠٣", "\u200b", "\xad", "\u2060", "\x00", "\x1f", "\u180e", "\ufeff", "C#", "F#",
          "x86-64", "1.5", "2h", "[2h]", "[1,5 h]", "·", "—", "–", "-", ":", "::", "#", "##", "###", "**bold**", "_em_",
          "`code`", "[link](https://example.org/a_b)", "<b>html</b>", "&amp;", "SELECT * FROM t;", "$x = 1;", "\\",
          '"quoted"', "'single'", "RA1", "RA2:", "Bloc", "2026-09-14", "14/09/2026", "dl", "Wed", "mié"]
-SPACES = [" "] * 12 + ["  ", "\t", " ", "　", " ", " ", " \t ", "\x1f"]
-BREAKS = ["\n", "\r\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", " ", " "]
+SPACES = [" "] * 12 + ["  ", "\t", "\xa0", "\u3000", "\u2003", "\u202f", " \t ", "\x1f"]
+BREAKS = ["\n", "\r\n", "\r", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"]
 BAD_DATES = ["2026-02-30", "2026-13-01", "2026-00-10", "00/01/2026", "32/01/2026", "29/02/2027", "0000-01-01",
              "2026-9-14", "14.09.2026", "2026/09/14", "sometime", "", "31/04/2027", "2026-09-31", "29/02/2100",
              "2026-W38-1", "20260914", "2026-09-14T10:00", "1/1/1", "014/09/2026", "dl", "#"]
 ODD_DATES = ["9999-12-31", "0001-01-01", "29/02/2028", "29/02/2000", "2026-09-145", "14/09/20261", "1/2/2027"]
 HOURS = ["[2h]"] * 6 + ["[1,5 h]", "[1.5h]", "[ 2 H ]", "[2]", "[2 hores]", "[h]", "[0h]", "[,5h]", "[1.h]",
-                        "[10,25h]", "[2h", "2h]", "[ 2 h ]", "[007h]", "[2 h]", "[2hh]", "[1.5.5h]", "[1,25H]",
+                        "[10,25h]", "[2h", "2h]", "[ 2\xa0h ]", "[007h]", "[2 h]", "[2hh]", "[1.5.5h]", "[1,25H]",
                         "[\t3\th\t]", "[" + "9" * 30 + "h]", "[" + "9" * 400 + "h]"]
-NOT_WEEKDAYS = ["Monday", "dll", "lu", "mi", "dimecres", "Mo", "x", "dl:", "MON,"]
-FENCES = ["```", "```python", "  ```", "~~~", "~~~ text", "````", "```inline```", " ```", "\t~~~", "``", "~~"]
+NOT_WEEKDAYS = ["Monday", "dll", "lu", "mi", "dimecres", "Mo", "x", "dl:", "MON,", "Setmana", "Sessió", "S", "S1",
+                "dl1", "\u017fat", "fr\u0131", "FR\u0130", "M\u043en", "\uff2don", "\uff24\uff2c", "d\u217c",
+                "Sun\u00b2", "dl\u00bd", "\u2167", "mie\u0301", "MIE\u0301", "\u212aon", "dl_", "d-l", "\u00e1",
+                "S\u00c1B\u00c1"]
+FENCES = ["```", "```python", "  ```", "   ```", "    ```", "\t```", "\xa0```", "~~~", "~~~ text", "~~~ `x`", "````",
+          "`````", "``````", "~~~~", "~~~~~", "```inline```", "```ls -la```", "``` sql `x`", "```   ", "``` x", "``",
+          "~~", " ~~~", "\t~~~", "~~~\t", "` ``", "```\xa0"]
+UNICODE_DATES = ["\u0661\u0664/\u0661\u0660/\u0662\u0660\u0662\u0666",
+                 "\uff12\uff10\uff12\uff16-\uff11\uff10-\uff10\uff15", "2026-1\u0660-05", "\u0967\u096a/09/2026",
+                 "14/09/202\u0666", "\U0001d7ee\U0001d7ec/09/2026"]
+UNICODE_HOURS = ["[\u0662h]", "[\uff13h]", "[1,\u0665h]", "[\u0967.5 h]", "[2\u00b2h]"]
 CODES = ["MP03", "MP 0372", "M3", "0372", "MP03b", "X1.2-a", "ABCDE1", "MP٠٣", "C1_2", "UF1", "MP", "Mòdul3", "3D",
          "A1é", "ab12_c.d-e"]
-SEPARATORS = [" · ", " · ", " — ", " – ", " - ", ": ", ":", " ·", "· ", "  ·  ", "\t·\t", " · ", " : ",
-              ":\t", " -- ", " —", " · "]
+SEPARATORS = [" · ", " · ", " — ", " – ", " - ", ": ", ":", " ·", "· ", "  ·  ", "\t·\t", "\xa0·\xa0", " : ",
+              ":\t", " -- ", " —", " ·\xa0"]
 WEEKDAY_NAMES = list(check_plan.WEEKDAYS)
 
 
@@ -179,8 +189,9 @@ def words(rng, low=1, high=8):
 
 
 def heading(rng, level, text):
-    sep = rng.choice([" "] * 12 + ["  ", "\t", "", " ", " \t"])
-    close = rng.choice([""] * 14 + [" #", " ##", "#", " # ", "\t#\t", " ###   ", " #" + " " * rng.randint(1, 60)])
+    sep = rng.choice([" "] * 12 + ["  ", "\t", "", "\xa0", " \t"])
+    close = rng.choice([""] * 14 + [" #", " ##", "#", "##", " # ", "\t#\t", " ###   ", " #" + " " * rng.randint(1, 60),
+                                    " C#", " C##", " # #", " #\xa0", "#\t", " \\#", " " + "#" * rng.randint(1, 300)])
     indent = " " if rng.random() < 0.03 else ""
     return indent + "#" * level + sep + text + close
 
@@ -203,23 +214,25 @@ def day_text(rng, cursor):
             text = f"{date.day:02d}/{date.month:02d}/{date.year}"
         else:
             text = f"{date.day}/{date.month}/{date.year}"
-    elif r < 0.93:
+    elif r < 0.9:
         text = rng.choice(BAD_DATES)
+    elif r < 0.95:
+        text = rng.choice(UNICODE_DATES)
     else:
         text = rng.choice(ODD_DATES)
     if rng.random() < 0.35:
         p = rng.random()
         if date is not None and p < 0.6:
             name = rng.choice([n for n, w in check_plan.WEEKDAYS.items() if w == date.weekday()])
-        elif p < 0.92:
+        elif p < 0.85:
             name = rng.choice(WEEKDAY_NAMES)
         else:
             name = rng.choice(NOT_WEEKDAYS)
         dot = "." if rng.random() < 0.15 else ""
-        gap = rng.choice(SPACES + ["", "​"])
+        gap = rng.choice(SPACES + ["", "\u200b"])
         text = random_case(rng, name) + dot + gap + text
     if rng.random() < 0.75:
-        text += rng.choice(SPACES + [""]) + rng.choice(HOURS)
+        text += rng.choice(SPACES + [""]) + rng.choice(HOURS if rng.random() < 0.95 else UNICODE_HOURS)
     if rng.random() < 0.6:
         text += rng.choice(SPACES + [""]) + words(rng, 1, 10)
     if rng.random() < 0.02:
@@ -233,7 +246,7 @@ def module_text(rng):
     if r < 0.5:
         return code + rng.choice(SEPARATORS) + title
     if r < 0.65:
-        return code + rng.choice([" ", " ", "\t", " "]) + title
+        return code + rng.choice([" ", " ", "\t", "\xa0"]) + title
     if r < 0.75:
         return title
     if r < 0.8:
@@ -252,12 +265,12 @@ def body_line(rng):
     if r < 0.4:
         return rng.choice(["", "- ", "* ", "1. ", "> ", "  - "]) + words(rng, 1, 12)
     if r < 0.5:
-        return rng.choice(["", "", "   ", "\t", " ", " \x1f "])
+        return rng.choice(["", "", "   ", "\t", "\xa0", " \x1f "])
     if r < 0.6:
         return heading(rng, rng.randint(4, 7), words(rng, 1, 5))
     if r < 0.68:
         return rng.choice(["#hashtag", "#", "##", "###", "#!", "####### seven", " ## indented", "\t# tabbed",
-                           "# nbsp", "#\ttab heading"])
+                           "#\xa0nbsp", "#\ttab heading"])
     if r < 0.73:
         return rng.choice(["x" * rng.randint(1000, 20000), words(rng, 200, 800), "a" + " " * rng.randint(100, 5000) + "b",
                            "- " + "é" * rng.randint(1000, 5000)])
@@ -273,7 +286,7 @@ def random_plan(seed, index):
     if rng.random() < 0.85:
         lines.append(heading(rng, 1, module_text(rng)))
     cursor = dt.date(2026, 9, 14) + dt.timedelta(days=rng.randint(-30, 200))
-    kinds = ["day"] * 30 + ["body"] * 40 + ["blank"] * 12 + ["block"] * 6 + ["fence"] * 3 + ["module"] * 2
+    kinds = ["day"] * 30 + ["body"] * 40 + ["blank"] * 12 + ["block"] * 6 + ["fence"] * 5 + ["module"] * 2
     for _ in range(rng.randint(3, 60)):
         kind = rng.choice(kinds)
         if kind == "day":
@@ -286,23 +299,26 @@ def random_plan(seed, index):
         elif kind == "block":
             lines.append(heading(rng, 2, rng.choice(["RA1 · ", "RA2: ", "Bloc 3 · ", "", "UF1 — "]) + words(rng, 0, 6)))
         elif kind == "fence":
-            lines.append(rng.choice(FENCES) + rng.choice(["", "", "sql", " bash"]))
+            if rng.random() < 0.2:
+                lines.append(" " * rng.randint(0, 4) + rng.choice("`~") * rng.randint(2, 400) + rng.choice(["", " ", "x"]))
+            else:
+                lines.append(rng.choice(FENCES) + rng.choice(["", "", "sql", " bash"]))
         else:
             lines.append(heading(rng, 1, module_text(rng)))
     scheme = rng.random()
-    if scheme < 0.5:
+    if scheme < 0.45:
         breaks = ["\n"] * len(lines)
-    elif scheme < 0.75:
+    elif scheme < 0.7:
         breaks = ["\r\n"] * len(lines)
     elif scheme < 0.8:
         breaks = ["\r"] * len(lines)
-    else:
+    else:  # mixed line ends, and characters that end lines for str.splitlines() but not in a plan
         breaks = [rng.choice(BREAKS[:3] * 4 + BREAKS) for _ in lines]
     text = "".join(line + br for line, br in zip(lines, breaks))
     if rng.random() < 0.2:
         text = text.rstrip("\n\r")
-    if text.startswith("﻿"):  # a leading byte order mark is a known divergence, not part of this corpus
-        text = "x" + text
+    if rng.random() < 0.05:
+        text = "\ufeff" + text
     timetable = rng.choice([DEFAULT_TIMETABLE] * 3 + [None, {}, {1: 1.0}, {0: 2.0, 3: 2.0}, {0: 1.5, 2: 2.25, 5: 3.0},
                                                        {i: 1.0 for i in range(7)}])
     holidays = rng.choice(["centre", "centre", None, "empty"])
@@ -321,19 +337,27 @@ PROBES = [
     ("empty text", "", {}),
     ("one empty line", "\n", {}),
     ("closing hash with no space", plan("# Programació en C#", "## RA1", "### 2026-10-05 [2h] C#", "- a"), {}),
-    ("no-break space after ###", plan(*HEAD, "### 2026-10-05 [2h]", "- a"), {}),
+    ("no-break space after ###", plan(*HEAD, "###\xa02026-10-05 [2h]", "- a"), {}),
     ("tab after ###", plan(*HEAD, "###\t2026-10-05 [2h]", "- a"), {}),
     ("seven hashes", plan(*HEAD, "### 2026-10-05 [2h]", "####### 2026-10-09 [2h]"), {}),
-    ("inline ``` toggles a fence", plan(*HEAD, "### 2026-10-05 [2h]", "```ls -la```", "### 2026-10-09 [2h]", "- b"), {}),
-    ("~~~ closes ```", plan(*HEAD, "### 2026-10-05 [2h]", "```", "x", "~~~", "### 2026-10-09 [2h]", "- b"), {}),
+    ("inline ``` is not a fence", plan(*HEAD, "### 2026-10-05 [2h]", "```ls -la```", "### 2026-10-09 [2h]", "- b"), {}),
+    ("~~~ does not close ```", plan(*HEAD, "### 2026-10-05 [2h]", "```", "x", "~~~", "### 2026-10-09 [2h]", "- b"), {}),
+    ("shorter closer, then a longer one", plan(*HEAD, "### 2026-10-05 [2h]", "````", "```", "### x", "`````", "### 2026-10-09"),
+     {}),
+    ("closer with text after it", plan(*HEAD, "### 2026-10-05 [2h]", "~~~", "~~~ x", "### x", "~~~  ", "### 2026-10-09"), {}),
+    ("fence indented by 3, 4 spaces and a tab", plan(*HEAD, "### 2026-10-05 [2h]", "   ```", "### x", "    ```", "\t```",
+                                                      "   ```", "    ```", "### 2026-10-09 [2h]"), {}),
+    ("tilde fence with backticks in its info", plan(*HEAD, "### 2026-10-05 [2h]", "~~~ `x`", "### x", "~~~"), {}),
+    ("backtick fence with a backtick in its info", plan(*HEAD, "### 2026-10-05 [2h]", "``` a`b", "### 2026-10-09"), {}),
+    ("400 backticks open, 399 do not close", plan(*HEAD, "### 2026-10-05 [2h]", "`" * 400, "`" * 399, "### x"), {}),
     ("unclosed fence", plan(*HEAD, "### 2026-10-05 [2h]", "```", "### 2026-10-09 [2h]", "## RA2"), {}),
     ("NUL at the end of a body", plan(*HEAD, "### 2026-10-05 [2h]", "- a\x00"), {}),
     ("unit separator around a title", plan(*HEAD, "### 2026-10-05 [2h] \x1fTitle\x1f", "- a"), {}),
-    ("Mongolian vowel separator around a title", plan(*HEAD, "### 2026-10-05 [2h] ᠎Title᠎", "- a"), {}),
-    ("zero-width space in a weekday gap", plan(*HEAD, "### dl​05/10/2026 [2h]", "- a"), {}),
+    ("Mongolian vowel separator around a title", plan(*HEAD, "### 2026-10-05 [2h] \u180eTitle\u180e", "- a"), {}),
+    ("zero-width space in a weekday gap", plan(*HEAD, "### dl\u200b05/10/2026 [2h]", "- a"), {}),
     ("lone CR", "# MP01 · X\r## RA1\r### 2026-10-05 [2h]\r- a\r", {}),
-    ("NEL, LS, PS, VT, FF and FS as line breaks",
-     "# MP01 · X\x85## RA1 ### 2026-10-05 [2h] - a\x0b### 2026-10-09 [2h]\x0c- b\x1c### x\x1d\x1e", {}),
+    ("NEL, LS, PS, VT, FF and FS inside lines",
+     "# MP01 · X\x85## RA1\u2028### 2026-10-05 [2h]\u2029- a\x0b### 2026-10-09 [2h]\x0c- b\x1c### x\x1d\x1e", {}),
     ("LF CR is two breaks", "# MP01 · X\n\r## RA1\n\r### 2026-10-05 [2h]\n\r- a", {}),
     ("empty block heading", plan("# MP01 · X", "## ", "### 2026-10-05 [2h]", "- a"), {}),
     ("empty module code", plan("# : Title", "## RA1", "### 2026-10-05 [2h]", "- a"), {}),
@@ -348,7 +372,7 @@ PROBES = [
     ("200 spaces before a closing hash", plan(*HEAD, "### 2026-10-05 [2h] T" + " " * 200 + "#" + " " * 200, "- a"), {}),
     ("digits glued to an ISO date", plan(*HEAD, "### 2026-09-145 [2h]", "- a"), {}),
     ("digits glued to a dd/mm/yyyy date", plan(*HEAD, "### 14/09/20261", "- a"), {}),
-    ("weekday, dot, no-break space", plan(*HEAD, "### DL. 14/09/2026 [2h]", "- a"), {}),
+    ("weekday, dot, no-break space", plan(*HEAD, "### DL.\xa014/09/2026 [2h]", "- a"), {}),
     ("weekday, dot, no space", plan(*HEAD, "### dl.14/09/2026 [2h]", "- a"), {}),
     ("upper-case Spanish weekdays", plan(*HEAD, "### MIÉ 14/10/2026 [2h]", "- a", "### SÁB 17/10/2026 [2h]", "- b"), {}),
     ("holiday with an empty label", plan(*HEAD, "### 2026-10-05 [2h]", "- a"), {"holidays": {"2026-10-05": ""}}),
@@ -357,27 +381,23 @@ PROBES = [
     ("year 1 and year 9999", plan(*HEAD, "### 0001-01-01 [1h]", "- a", "### 9999-12-31 [1h]", "- b"), {}),
     ("29 February in 2000 and 2100", plan(*HEAD, "### 29/02/2000", "- a", "### 29/02/2100", "- b"), {}),
     ("text before the first heading", plan("notes", "- 2026-10-05", "# MP01 · X", "### 2026-10-05 [2h]", "- a"), {}),
-    ("byte order mark after line 1", plan("notes", "﻿# MP01 · X", "## RA1", "### 2026-10-05 [2h]", "- a"), {}),
+    ("byte order mark after line 1", plan("notes", "\ufeff# MP01 · X", "## RA1", "### 2026-10-05 [2h]", "- a"), {}),
+    ("byte order mark", "\ufeff" + plan("# MP01 · Saved by Notepad", "## RA1", "### 2026-10-05 [2h]", "- a"), {}),
+    ("two byte order marks", "\ufeff\ufeff" + plan("# MP01 · X", "## RA1", "### 2026-10-05 [2h]", "- a"), {}),
+    ("byte order mark, CR line ends", "\ufeff# MP01 · X\r## RA1\r### 2026-10-05 [2h]\r- a", {}),
+    ("closing hashes", plan("# C# ##", "## x ##", "## C##", "## ##", "## a # #", "### 2026-10-05 [2h] T #\xa0", "- a"), {}),
+    ("Arabic-Indic digits, dd/mm/yyyy", plan(*HEAD, "### \u0661\u0664/\u0661\u0660/\u0662\u0660\u0662\u0666 [2h]",
+                                              "- a"), {}),
+    ("full-width digits in hours", plan(*HEAD, "### 2026-10-14 [\uff13h]", "- a"), {"timetable": None}),
+    ("long s in a weekday", plan(*HEAD, "### \u017fat 10/10/2026 [2h]", "- a"), {}),
+    ("dotless i in a weekday", plan(*HEAD, "### fr\u0131 09/10/2026 [2h]", "- a"), {}),
+    ("dotted capital I in a weekday", plan(*HEAD, "### FR\u0130 09/10/2026 [2h]", "- a"), {}),
+    ("Kelvin sign, full-width and Cyrillic letters", plan(*HEAD, "### \u212aon 05/10/2026", "### \uff2don 05/10/2026",
+                                                         "### M\u043en 05/10/2026", "- a"), {}),
+    ("roman numeral and superscript in a word", plan(*HEAD, "### d\u217c 05/10/2026", "### Sun\u00b2 05/10/2026"), {}),
+    ("decomposed accent in mié", plan(*HEAD, "### mie\u0301 14/10/2026 [2h]", "- a"), {}),
+    ("not a weekday word", plan(*HEAD, "### Setmana 16/10/2026 [2h]", "- a", "### S\u00c1B 17/10/2026 [2h]", "- b"), {}),
 ]
-
-KNOWN_DIVERGENCES = [
-    ("byte order mark", "﻿" + plan("# MP01 · Saved by Notepad", "## RA1", "### 2026-10-05 [2h]", "- a"), {},
-     "REQ-PLN-001: the reference keeps U+FEFF on line 1, so '# MP01' is not a heading (no_module_heading); "
-     "PHP ignores a leading BOM"),
-    ("Arabic-Indic digits, dd/mm/yyyy", plan(*HEAD, "### ١٤/١٠/٢٠٢٦ [2h]", "- a"), {},
-     "REQ-PLN-004: the reference reads this date, yet rejects the same digits as yyyy-mm-dd; "
-     "PHP reads dates in ASCII digits only (bad_date)"),
-    ("full-width digits in hours", plan(*HEAD, "### 2026-10-14 [３h]", "- a"), {"timetable": None},
-     "REQ-PLN-006: the reference reads 3 hours; PHP reads hours in ASCII digits only, "
-     "so '[３h]' is the title and the hours are missing"),
-    ("long s in a weekday", plan(*HEAD, "### ſat 10/10/2026 [2h]", "- a"), {},
-     "REQ-PLN-004: 'ſ' matches 's' under re.I, then WEEKDAYS['ſat'] raises KeyError; PHP: not a weekday (bad_date)"),
-    ("dotless i in a weekday", plan(*HEAD, "### frı 09/10/2026 [2h]", "- a"), {},
-     "REQ-PLN-004: 'ı' matches 'i' under re.I, then KeyError; PHP: bad_date"),
-    ("dotted capital I in a weekday", plan(*HEAD, "### FRİ 09/10/2026 [2h]", "- a"), {},
-     "REQ-PLN-004: 'İ' matches 'i' under re.I, then 'FRİ'.lower() is 'fri̇', KeyError; PHP: bad_date"),
-]
-
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -412,7 +432,7 @@ def main():
                       else DEFAULT_TIMETABLE) for name, c in cases.items()]
         bad = 0
         for path, timetable in fixtures:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_bytes().decode("utf-8")  # keep CR and CRLF as written, as the selftest does
             py, php = python_result(text, holidays, timetable, year), php_file(path, holidays_file, timetable, year)
             diff = differences(py, php)
             if diff:
@@ -468,24 +488,7 @@ def main():
     if args.only is not None:
         return 1 if failures else 0
 
-    # Known divergences: each must still differ.
-    requests = []
-    for _, text, over, _ in KNOWN_DIVERGENCES:
-        requests.append({"text": text, "holidays": over.get("holidays", holidays),
-                         "timetable": over.get("timetable", DEFAULT_TIMETABLE), "year": over.get("year", year)})
-    agree = 0
-    print(f"known divergences: {len(KNOWN_DIVERGENCES)} inputs where PHP differs on purpose")
-    for (name, text, _, why), request, php in zip(KNOWN_DIVERGENCES, requests, php_batch(requests)):
-        py = python_result(text, request["holidays"], request["timetable"], request["year"])
-        diff = differences(py, php)
-        agree += not diff
-        print(f"  {'differs' if diff else 'AGREES '} {name}: {short(text, 80)}")
-        print(f"          {why}")
-        print(f"          python {short(py.get('exception') or py['summary'], 200)}")
-        print(f"          php    {short(php.get('exception') or php['summary'], 200)}")
-    failures += agree
-
-    print("\n" + ("no unexpected differences" if not failures else f"{failures} unexpected result(s)"))
+    print("\n" + ("no differences" if not failures else f"{failures} input(s) with differences"))
     return 1 if failures else 0
 
 
