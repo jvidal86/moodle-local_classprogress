@@ -56,7 +56,6 @@ Base folder for everything outside the project: `~/moodle-dev`. Each stack gets 
   moodle-docker-405/  moodle-docker-503/   moodlehq/moodle-docker@f4c2324, each with its own local.yml
   moodle405/  moodle503/              Moodle checkouts (about 440 MB and 700 MB)
   ci/                                 moodle-plugin-ci 4.5.11 for local checks (section 5, step 6)
-  plugincopy/classprogress/           throw-away copy of the plugin those checks run on (step 6)
 ```
 
 ```bash
@@ -193,28 +192,21 @@ Stop without losing data: `moodle-docker-compose stop` and later `start`. Destro
    # once, on the host (about 10 s; host PHP is enough to install it)
    cd ~/moodle-dev && composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
 
-   # the checks read their ignore list from <plugin>/.moodle-plugin-ci.yml, which only `install` writes,
-   # so check a copy that has the file (otherwise tools/host-phpunit/vendor is linted: 950 files, phpcs fails)
-   rm -rf ~/moodle-dev/plugincopy && mkdir -p ~/moodle-dev/plugincopy
-   rsync -a --exclude .git --exclude tools/host-phpunit/vendor ~/PROJECTS/class-progress-tracking/ ~/moodle-dev/plugincopy/classprogress/
-   printf 'filter:\n  notPaths:\n    - %s\n' "'/^(tools|test-data|docs|prototype)\//'" > ~/moodle-dev/plugincopy/classprogress/.moodle-plugin-ci.yml
+   # The ignore list is committed in .moodle-plugin-ci.yml (tools/, test-data/, docs/, prototype/), so the checks
+   # run on the repository itself (verified in R0, 2026-10-18: phplint checks only the 3 plugin files, all exit 0).
+   cd ~/PROJECTS/class-progress-tracking
+   ~/moodle-dev/ci/bin/moodle-plugin-ci phplint .
+   ~/moodle-dev/ci/bin/moodle-plugin-ci phpcs --max-warnings 0 .
+   ~/moodle-dev/ci/bin/moodle-plugin-ci mustache .
+   ~/moodle-dev/ci/bin/moodle-plugin-ci savepoints .
 
-   # no Moodle needed: run on the host
-   cd ~/moodle-dev/plugincopy
-   ~/moodle-dev/ci/bin/moodle-plugin-ci phplint ./classprogress
-   ~/moodle-dev/ci/bin/moodle-plugin-ci phpcs --max-warnings 0 ./classprogress
-   ~/moodle-dev/ci/bin/moodle-plugin-ci mustache ./classprogress
-   ~/moodle-dev/ci/bin/moodle-plugin-ci savepoints ./classprogress
-
-   # validate, phpdoc and phpunit load Moodle's config.php, so they run in the webserver container
-   # (4.5 shown; 5.3: cp503-webserver-1 and /var/www/html/public/local/classprogress).
-   # The copies are lost when the container is recreated; repeat the docker cp then.
-   # Copy into the parent folder: copying onto an existing /opt/ci would nest it as /opt/ci/ci.
-   docker exec cp405-webserver-1 rm -rf /opt/ci /tmp/plugincopy
+   # validate, phpdoc and phpunit load Moodle's config.php, so they run in the webserver container, on the mounted
+   # plugin (4.5 shown; 5.3: cp503-webserver-1 and /var/www/html/public/local/classprogress).
+   # The tool copy in /opt/ci is lost when the container is recreated; repeat the docker cp then.
+   docker exec cp405-webserver-1 rm -rf /opt/ci
    docker cp -q ~/moodle-dev/ci cp405-webserver-1:/opt/
-   docker cp -q ~/moodle-dev/plugincopy cp405-webserver-1:/tmp/
    moodle-docker-compose exec webserver php /opt/ci/bin/moodle-plugin-ci validate --moodle /var/www/html /var/www/html/local/classprogress
-   moodle-docker-compose exec webserver php /opt/ci/bin/moodle-plugin-ci phpdoc --max-warnings 0 --moodle /var/www/html /tmp/plugincopy/classprogress
+   moodle-docker-compose exec webserver php /opt/ci/bin/moodle-plugin-ci phpdoc --max-warnings 0 --moodle /var/www/html /var/www/html/local/classprogress
    moodle-docker-compose exec webserver php /opt/ci/bin/moodle-plugin-ci phpunit --fail-on-warning --moodle /var/www/html /var/www/html/local/classprogress
    ```
    Results on the skeleton: `phplint` and `phpcs` check 3 files with no problems; `mustache` and `savepoints` report `No relevant files found to process, free pass!`; `validate` finds `version.php`, `lang/en/local_classprogress.php` and `pluginname` and only skips the optional `db/upgrade.php` and `db/install.xml`; `phpdoc` reports no problems; `phpunit` gives the same results as step 3. Not run locally: `phpmd`, `grunt` (needs Node inside the container) and `behat` through the tool. On the host, `validate` and `phpdoc` stop with `$CFG->dataroot is not configured properly`, which is why they run in the container.
@@ -259,4 +251,4 @@ M0 is followed by review round R0 (`PLAN.md` section 6): every command in this f
 - [x] Behat init and run work on both stacks (no scenarios yet)
 - [x] This file updated: every "planned" above becomes "verified", with the real paths and commands
 - [x] `.github/workflows/ci.yml` green on all four jobs (verified 2026-10-18: run 39121373112 on commit c9881ca at github.com/jvidal86/moodle-local_classprogress, every step including PHPUnit and Behat passed on 4.5/8.1/pgsql, 4.5/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.4/mariadb)
-- [ ] R0 check that a deliberately failing test turns CI red (remote exists; to do in review round R0)
+- [x] R0 check that a deliberately failing test turns CI red (verified 2026-10-18: run 39122800125 failed at the PHPUnit step on all four jobs; see `docs/reviews/R0-M0.md`)

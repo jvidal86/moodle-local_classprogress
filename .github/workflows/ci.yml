@@ -69,9 +69,7 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
-          # Development material, not part of the plugin (export-ignore in .gitattributes).
-          # Anchored regex: a plain string would also match any path that merely contains the word.
-          IGNORE_PATHS: '/^(tools|test-data|docs|prototype)\//'
+          # Files to ignore are in .moodle-plugin-ci.yml (when that file exists, install does not use IGNORE_PATHS).
 
       - name: PHP Lint
         if: ${{ !cancelled() }}

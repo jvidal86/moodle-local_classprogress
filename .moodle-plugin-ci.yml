@@ -1,0 +1,5 @@
+# moodle-plugin-ci reads this file (src/Bridge/MoodlePlugin.php getIgnores) for every code check, both in CI and
+# in local runs. Development material that is not part of the plugin, and is export-ignored in .gitattributes:
+filter:
+  notPaths:
+    - /^(tools|test-data|docs|prototype)\//
