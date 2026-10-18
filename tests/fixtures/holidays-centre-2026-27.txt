@@ -1,0 +1,32 @@
+# Holidays and non-teaching days · Institut Jaume Huguet · Valls · 2026-2027
+# Source: seguiment-programacio/calendari-centre-2026-27.yaml (same dates as the school's official calendar).
+# One entry per line: a single date or a period, then an optional label. Lines starting with # are ignored.
+
+2026-09-11 Diada Nacional de Catalunya
+2026-10-12 Festa Nacional d'Espanya
+2026-11-01 Tots Sants
+2026-11-02 Lliure disposició del centre
+2026-12-06 Dia de la Constitució
+2026-12-07 Lliure disposició del centre
+2026-12-08 La Immaculada
+2026-12-22 to 2027-01-07 Vacances de Nadal
+2027-02-01 Lliure disposició del centre
+2027-02-02 Festa local de Valls (la Candelera)
+2027-03-22 to 2027-03-29 Vacances de Setmana Santa
+2027-04-30 Lliure disposició del centre
+2027-05-01 Festa del Treball
+2027-05-03 Lliure disposició del centre
+2027-06-24 Sant Joan
+2027-06-25 Festa local de Valls
+
+# School notices: classes are held, but not as usual (the importer treats these as information only).
+# 2027-01-19 Jornada Joves i Empresa
+# 2027-01-20 Jornada Joves i Empresa
+# 2027-01-29 Sant Joan Bosco
+# 2027-02-16 Auditoria interna
+# 2027-03-03 Espai de l'Estudiant
+# 2027-03-04 Espai de l'Estudiant
+# 2027-04-23 Sant Jordi
+# 2027-04-27 Auditoria externa
+# 2027-04-28 Auditoria externa
+# 2027-06-18 Sortida lúdica

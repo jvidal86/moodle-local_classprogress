@@ -1,0 +1,13 @@
+{
+  "bad-date.md": {"req": ["REQ-PLN-005"], "errors": ["bad_date", "bad_date"], "warnings": [], "days": 1, "hours": 2.0},
+  "two-modules.md": {"req": ["REQ-PLN-002"], "errors": ["multiple_modules"], "warnings": [], "days": 2},
+  "no-module-heading.md": {"req": ["REQ-PLN-001"], "errors": [], "warnings": ["no_module_heading"], "days": 1, "module": null},
+  "holiday-and-weekday.md": {"req": ["REQ-PLN-012"], "errors": [], "warnings": ["no_class_weekday", "no_class_weekday", "on_holiday", "weekday_mismatch"], "days": 3},
+  "out-of-order-empty.md": {"req": ["REQ-PLN-007", "REQ-PLN-011"], "errors": [], "warnings": ["empty_day", "out_of_order"], "days": 3},
+  "no-block.md": {"req": ["REQ-PLN-003"], "errors": [], "warnings": ["no_block"], "days": 1, "blocks": 0},
+  "code-fence.md": {"req": ["REQ-PLN-008"], "errors": [], "warnings": [], "days": 1, "blocks": 1, "code": "MP99"},
+  "same-date-twice.md": {"req": ["REQ-PLN-010"], "errors": [], "warnings": [], "days": 2, "hours": 2.0},
+  "formats.md": {"req": ["REQ-PLN-001", "REQ-PLN-004", "REQ-PLN-006"], "timetable": "none", "errors": [], "warnings": [], "days": 4, "hours": 7.5, "code": null, "module": "Programació"},
+  "outside-year.md": {"req": ["REQ-PLN-013"], "errors": [], "warnings": ["outside_year", "outside_year"], "days": 2},
+  "missing-hours.md": {"req": ["REQ-PLN-006"], "errors": [], "warnings": ["missing_hours", "no_class_weekday"], "days": 2, "hours": 2.0}
+}

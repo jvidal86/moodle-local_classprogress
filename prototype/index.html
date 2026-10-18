@@ -1,0 +1,858 @@
+<title>Class Progress</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: Moodle-style top bar, tab strip, two-pane workspaces (list + editor). One blue accent; status colours (done/partial/not done/added) are separate semantic tokens. */
+:root{
+  --bg:#f3f5f9; --surface:#ffffff; --surface-2:#f7f8fb; --ink:#19222f; --muted:#59667a; --line:#dbe0e9;
+  --accent:#2a55c7; --accent-soft:#e6edfc; --on-accent:#ffffff;
+  --done:#1a7a49; --done-soft:#e0f3e8;
+  --partial:#94600a; --partial-soft:#fcefd2;
+  --notdone:#ad2f1d; --notdone-soft:#fae3de;
+  --added:#5846b0; --added-soft:#eae7f8;
+  --warn:#94600a; --warn-soft:#fcefd2;
+  --hatch:#d9dee8;
+  --font-ui:'Public Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151c; --surface:#171e28; --surface-2:#1c2431; --ink:#e5eaf2; --muted:#9aa7b9; --line:#2a3443;
+    --accent:#86a3ff; --accent-soft:#1f2c50; --on-accent:#0d1426;
+    --done:#58c88c; --done-soft:#13301f;
+    --partial:#e8b24d; --partial-soft:#362a0e;
+    --notdone:#f28c7a; --notdone-soft:#3b1b15;
+    --added:#ab9ef2; --added-soft:#262040;
+    --warn:#e8b24d; --warn-soft:#362a0e;
+    --hatch:#2f3a4b;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151c; --surface:#171e28; --surface-2:#1c2431; --ink:#e5eaf2; --muted:#9aa7b9; --line:#2a3443;
+  --accent:#86a3ff; --accent-soft:#1f2c50; --on-accent:#0d1426;
+  --done:#58c88c; --done-soft:#13301f;
+  --partial:#e8b24d; --partial-soft:#362a0e;
+  --notdone:#f28c7a; --notdone-soft:#3b1b15;
+  --added:#ab9ef2; --added-soft:#262040;
+  --warn:#e8b24d; --warn-soft:#362a0e;
+  --hatch:#2f3a4b;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--font-ui);-webkit-text-size-adjust:100%}
+h1,h2,h3{margin:0;line-height:1.25;text-wrap:balance}
+h1{font-size:22px;font-weight:700}
+h2{font-size:16px;font-weight:650}
+h3{font-size:14px;font-weight:650}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.inner{max-width:1180px;margin:0 auto}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* host bar */
+.bar{background:var(--surface);border-bottom:1px solid var(--line)}
+.bar .inner{display:flex;align-items:center;gap:6px 20px;flex-wrap:wrap;padding-block:8px;min-height:48px}
+.brand{font-weight:700;letter-spacing:.01em;margin-right:8px}
+.bar nav{display:flex;gap:4px 18px;flex-wrap:wrap}
+.bar nav span{color:var(--muted);padding-block:6px;border-bottom:2px solid transparent}
+.bar nav span.on{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
+.bar .who{margin-left:auto;color:var(--muted);font-size:13px}
+
+/* page head */
+.head{padding-block:20px 6px;display:flex;gap:12px 24px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between}
+.head .sub{color:var(--muted);margin-top:2px}
+.demo{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.demo label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.demo input{width:auto}
+
+/* tabs */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto;margin-top:10px}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;margin-bottom:-1px;color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.count{background:var(--notdone-soft);color:var(--notdone);border-radius:999px;font-size:12px;line-height:18px;min-width:20px;text-align:center;padding:0 6px;font-weight:700}
+
+main{padding-block:18px 40px}
+
+/* generic */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.pad{padding:16px}
+.stack{display:flex;flex-direction:column;gap:16px}
+.row-flex{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.small{padding:4px 9px;font-size:13px}
+.btn.link{border-color:transparent;background:none;color:var(--accent);padding-inline:6px}
+label.f{display:block;font-weight:600;margin-bottom:4px}
+input[type=text],input[type=date],input[type=number],select,textarea{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+textarea{resize:vertical;line-height:1.5}
+input[type=number]{width:72px;text-align:center}
+.hint{font-size:12.5px;color:var(--muted);margin-top:4px}
+
+.chip{display:inline-flex;align-items:center;gap:5px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:600;line-height:20px;white-space:nowrap;background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.chip.done{background:var(--done-soft);color:var(--done);border-color:transparent}
+.chip.partial,.chip.warn{background:var(--partial-soft);color:var(--partial);border-color:transparent}
+.chip.notdone,.chip.bad{background:var(--notdone-soft);color:var(--notdone);border-color:transparent}
+.chip.added{background:var(--added-soft);color:var(--added);border-color:transparent}
+.chip.accent{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.chip.none{background:transparent;color:var(--muted);border-style:dashed}
+
+.banner{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.banner.ok{background:var(--done-soft);border-color:transparent}
+.banner.warn{background:var(--warn-soft);border-color:transparent}
+.banner svg{flex:none;margin-top:2px}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.tablewrap.tall{max-height:480px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{position:sticky;top:0;background:var(--surface-2);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap;z-index:1}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right}
+.nowrap{white-space:nowrap}
+
+/* setup */
+.cols{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:16px;align-items:start}
+.hours-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.hours-grid div{text-align:center}
+.hours-grid .dn{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.stats{display:flex;gap:24px;flex-wrap:wrap}
+.stat .v{font-size:26px;font-weight:700;font-family:var(--font-mono);line-height:1.1}
+.stat .l{font-size:12px;color:var(--muted)}
+.hol-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.hol-list li{display:flex;gap:8px 12px;flex-wrap:wrap;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line)}
+.hol-list li:last-child{border-bottom:0}
+.months{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:14px}
+.month h3{font-size:13px;margin-bottom:6px;display:flex;justify-content:space-between;gap:6px}
+.month h3 span{color:var(--muted);font-weight:500;font-family:var(--font-mono);font-size:12px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal i{font-style:normal;text-align:center;font-size:10.5px;color:var(--muted);font-weight:700}
+.cal b{font-weight:500;text-align:center;font-size:11.5px;line-height:22px;border-radius:4px;font-family:var(--font-mono);color:var(--muted)}
+.cal b.teach{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.cal b.hol{background-image:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 6px);color:var(--ink)}
+.cal b.lost{outline:1.5px solid var(--notdone);outline-offset:-1.5px}
+.cal b.out{opacity:.25}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:12px}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block}
+.sw.t{background:var(--accent-soft);border:1px solid var(--accent)}
+.sw.h{background-image:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 6px)}
+.sw.l{border:1.5px solid var(--notdone)}
+
+/* log */
+.split{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:16px;align-items:start}
+.list-head{padding:14px 14px 10px;display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.filter{display:flex;gap:4px;padding:0 14px 10px;flex-wrap:wrap}
+.filter button{background:none;border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.filter button[aria-pressed="true"]{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.sess{list-style:none;margin:0;padding:0;max-height:620px;overflow:auto;border-top:1px solid var(--line)}
+.sess li{border-bottom:1px solid var(--line)}
+.sess li:last-child{border-bottom:0}
+.srow{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;width:100%;text-align:left;background:none;border:0;padding:10px 14px;cursor:pointer;border-left:3px solid transparent}
+.srow:hover{background:var(--surface-2)}
+.srow[aria-current="true"]{background:var(--accent-soft);border-left-color:var(--accent)}
+.srow .d{font-family:var(--font-mono);font-size:13px;font-weight:500;white-space:nowrap}
+.srow .d small{color:var(--muted);margin-left:6px}
+.srow .t{grid-column:2;grid-row:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .c{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.ed-top{display:flex;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;align-items:baseline}
+.plan-box{display:flex;gap:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.plan-box svg{flex:none;margin-top:3px;color:var(--muted)}
+.seg{display:flex;gap:6px;flex-wrap:wrap;border:0;padding:0;margin:0;min-width:0}
+.seg legend{font-weight:600;margin-bottom:4px;padding:0}
+.segopt{position:relative;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600;background:var(--surface)}
+.segopt input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.segopt:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.segopt.s-done:has(input:checked){background:var(--done-soft);border-color:var(--done);color:var(--done)}
+.segopt.s-partial:has(input:checked){background:var(--partial-soft);border-color:var(--partial);color:var(--partial)}
+.segopt.s-not_done:has(input:checked){background:var(--notdone-soft);border-color:var(--notdone);color:var(--notdone)}
+.segopt.s-added:has(input:checked){background:var(--added-soft);border-color:var(--added);color:var(--added)}
+.segopt.v2{opacity:.55;border-style:dashed;cursor:not-allowed;font-weight:500}
+.reason-grid{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:8px}
+.stamp{display:flex;gap:6px 18px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted);padding:8px 0;border-top:1px dashed var(--line)}
+.stamp>span{display:inline-flex;gap:6px;align-items:center}
+.err{color:var(--notdone);font-weight:600;font-size:13px}
+details.hist summary{cursor:pointer;color:var(--muted);font-weight:600}
+details.hist ol{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:13px}
+
+/* plan import */
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps span{padding:3px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--muted)}
+.steps span.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.steps span.past{color:var(--done)}
+.map-row{display:grid;grid-template-columns:minmax(0,170px) minmax(0,240px) minmax(0,1fr);gap:8px 14px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.dropzone{border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;background:var(--surface-2)}
+.tiles{display:flex;gap:10px;flex-wrap:wrap}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px}
+.tile .v{font-size:22px;font-weight:700;font-family:var(--font-mono);line-height:1.15}
+.tile .l{font-size:12px;color:var(--muted)}
+.bar-s{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line)}
+.bar-s i{display:block;height:100%}
+.bar-s .b-done{background:var(--done)}
+.bar-s .b-partial{background:var(--partial)}
+.bar-s .b-notdone{background:var(--notdone)}
+.bar-s .b-none{background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 6px)}
+
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:20}
+#toast.on{opacity:1}
+.foot{color:var(--muted);font-size:12.5px;padding-block:8px 28px;display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center}
+
+@media (max-width:860px){
+  .cols,.split{grid-template-columns:minmax(0,1fr)}
+  .map-row{grid-template-columns:minmax(0,1fr)}
+  .reason-grid{grid-template-columns:minmax(0,1fr)}
+  .sess{max-height:340px}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+
+<div class="bar gut"><div class="inner">
+  <span class="brand">Campus · IES Example</span>
+  <nav aria-label="Site"><span>Dashboard</span><span>My courses</span><span>Calendar</span><span class="on">Class progress</span></nav>
+  <span class="who">Prototype · sample data</span>
+</div></div>
+
+<div class="gut"><div class="inner">
+  <header class="head">
+    <div>
+      <h1 id="h-title">Class progress</h1>
+      <p class="sub" id="h-sub"></p>
+    </div>
+    <div class="demo"><label for="demo-date">Demo date</label><input type="date" id="demo-date" aria-label="Pretend today is"></div>
+  </header>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <main id="view"></main>
+  <div class="foot">
+    <span>Prototype: data stays in this browser. Dates and holidays are examples, check the official calendar.</span>
+    <button class="btn small" data-act="reset">Reset demo data</button>
+  </div>
+</div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ---------- helpers ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const toISO = d => d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+const fromISO = s => { const p = s.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); };
+const validISO = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && toISO(fromISO(s)) === s;
+const addDays = (iso, n) => { const d = fromISO(iso); d.setUTCDate(d.getUTCDate() + n); return toISO(d); };
+const daysBetween = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 864e5);
+const fmt = iso => { if (!iso) return '—'; const d = fromISO(iso); return DOW[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; };
+const fmtY = iso => iso ? fmt(iso) + ' ' + iso.slice(0, 4) : '—';
+const num = v => (Math.round(v * 10) / 10).toString();
+
+const ST = {
+  done:     { label: 'Done',              cls: 'done' },
+  partial:  { label: 'Partly done',       cls: 'partial' },
+  not_done: { label: 'Not done',          cls: 'notdone' },
+  added:    { label: 'Added (unplanned)', cls: 'added' }
+};
+const REASONS = ['Vaga (strike)', 'Incident', 'Excursió (trip)', 'Activitat de centre (school event)', 'Absència (teacher absent)', 'Other'];
+
+const LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>';
+const WARN = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 2.5l7 12.5H2z"/><path d="M9 7.5v3.2M9 12.6v.1"/></svg>';
+const CHECK = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="9" r="7"/><path d="M5.8 9.2l2.3 2.3 4-4.4"/></svg>';
+
+/* ---------- sample plan (Catalan school, 2n ESO B maths) ---------- */
+const UNITS = [
+  ['UF1 · Nombres i proporcionalitat', ['Nombres enters','Fraccions','Operacions amb fraccions','Decimals i aproximació','Potències','Arrels','Notació científica','Raons i proporcions','Percentatges']],
+  ['UF2 · Àlgebra', ['Expressions algebraiques','Monomis i polinomis','Operacions amb polinomis','Identitats notables','Equacions de primer grau','Problemes amb equacions','Equacions de segon grau','Sistemes d\'equacions','Resolució de sistemes']],
+  ['UF3 · Geometria', ['Angles i triangles','Teorema de Pitàgores','Semblança i Tales','Polígons','Cercle i circumferència','Àrees de figures planes','Cossos geomètrics','Volums','Moviments en el pla']],
+  ['UF4 · Funcions', ['Coordenades','Concepte de funció','Gràfiques i interpretació','Funció lineal','Funció afí','Rectes i equacions','Funció quadràtica','Proporcionalitat inversa','Modelització']],
+  ['UF5 · Estadística i probabilitat', ['Població i mostra','Taules de freqüències','Gràfics estadístics','Mitjana, mediana i moda','Mesures de dispersió','Experiments aleatoris','Regla de Laplace','Probabilitat composta','Projecte final']]
+];
+function samplePlanRows(){
+  const out = [];
+  UNITS.forEach(u => {
+    u[1].forEach(t => {
+      out.push({ unit: u[0], topic: t + ' · explicació i exemples', note: '' });
+      out.push({ unit: u[0], topic: t + ' · pràctica', note: '' });
+    });
+    out.push({ unit: u[0], topic: 'Repàs i prova de la unitat', note: 'Prova escrita' });
+  });
+  const cyc = [1, 2, 1];
+  out.forEach((r, i) => { r.hours = cyc[i % 3]; r.week = Math.floor(i / 3) + 1; });
+  return out;
+}
+
+/* ---------- calendar logic ---------- */
+function parseHolidays(text){
+  const out = [];
+  const tok = '(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}/\\d{1,2}/\\d{4})';
+  const re = new RegExp('^' + tok + '\\s*(?:(?:to|a|–|—|-|\\.\\.|→)\\s*' + tok + ')?\\s*(.*)$', 'i');
+  const conv = t => {
+    if (t.indexOf('/') > -1) { const p = t.split('/'); t = p[2] + '-' + pad(p[1]) + '-' + pad(p[0]); }
+    return validISO(t) ? t : null;
+  };
+  String(text || '').split('\n').forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || line[0] === '#') return;
+    const m = line.match(re);
+    if (!m) { out.push({ line: i + 1, raw: line, error: 'Not a date. Use 2026-12-07 or 2026-12-23 to 2027-01-06.' }); return; }
+    const a = conv(m[1]), b = m[2] ? conv(m[2]) : a;
+    if (!a || (m[2] && !b)) { out.push({ line: i + 1, raw: line, error: 'That date does not exist.' }); return; }
+    if (b < a) { out.push({ line: i + 1, raw: line, error: 'The period ends before it starts.' }); return; }
+    out.push({ line: i + 1, raw: line, start: a, end: b, label: (m[3] || '').trim(), lost: 0 });
+  });
+  return out;
+}
+function calcFor(setup){
+  const res = { sessions: [], hols: [], holMap: new Map(), hours: 0, ok: false };
+  res.hols = parseHolidays(setup.holidays);
+  res.hols.forEach((h, hi) => {
+    if (h.error) return;
+    let d = h.start, n = 0;
+    while (d <= h.end && n++ < 400) { if (!res.holMap.has(d)) res.holMap.set(d, hi); d = addDays(d, 1); }
+  });
+  if (!validISO(setup.start) || !validISO(setup.end) || setup.end < setup.start) return res;
+  res.ok = true;
+  let d = setup.start, n = 0;
+  while (d <= setup.end && n++ < 460) {
+    const h = Number(setup.hours[fromISO(d).getUTCDay()]) || 0;
+    if (h > 0) {
+      if (res.holMap.has(d)) res.hols[res.holMap.get(d)].lost++;
+      else { res.sessions.push({ date: d, hours: h }); res.hours += h; }
+    }
+    d = addDays(d, 1);
+  }
+  return res;
+}
+
+/* ---------- state ---------- */
+const KEY = 'classprogress.prototype.v1';
+let state, imp = null, cacheKey = '', cacheVal = null;
+
+function defaultState(){
+  const setup = {
+    name: 'Matemàtiques · 2n ESO B', start: '2026-09-14', end: '2027-06-22',
+    hours: { 0: 0, 1: 1, 2: 0, 3: 2, 4: 0, 5: 1, 6: 0 },
+    holidays: [
+      '2026-10-12 Festa Nacional',
+      '2026-12-07 to 2026-12-08 Pont de la Puríssima',
+      '2026-12-23 to 2027-01-06 Nadal',
+      '2027-03-22 to 2027-03-29 Setmana Santa',
+      '17/05/2027 Pasqua Granada'
+    ].join('\n')
+  };
+  const items = samplePlanRows().map((r, i) => ({ id: 'p' + (i + 1), week: r.week, unit: r.unit, topic: r.topic, hours: r.hours, note: r.note }));
+  const st = { today: '2026-10-18', tab: 'log', filter: 'pending', sel: null, unitFilter: '', scope: 'todate', setup,
+    plan: { status: 'approved', approvedOn: '2026-09-10', source: 'pla-anual-2n-eso-b.xlsx', items }, entries: {} };
+  const C = calcFor(setup);
+  const mk = (i, status, text, extra) => {
+    const it = items[i], s = C.sessions[i];
+    const e = Object.assign({ key: it.id, itemId: it.id, sessionDate: s.date, hours: s.hours, status, text, reason: '', reasonNote: '', carry: false,
+      writtenOn: s.date, lastEdited: s.date }, extra || {});
+    e.history = [{ at: e.writtenOn, status, text }];
+    st.entries[it.id] = e;
+  };
+  const gen = 'Explicació a la pissarra, exemples guiats i exercicis 1–6 del llibre.';
+  [0, 1, 2, 3, 5, 8, 9].forEach(i => mk(i, 'done', gen));
+  mk(4, 'partial', 'Hem arribat a la meitat de la teoria; falten els exercicis 7–12.', { carry: true, reason: 'Other', reasonNote: 'Ha costat recuperar la classe després del pati.' });
+  mk(6, 'not_done', 'Sessió no realitzada.', { reason: 'Vaga (strike)', reasonNote: 'Vaga de docents; el grup no ha tingut classe.' });
+  mk(7, 'done', gen, { writtenOn: addDays(C.sessions[7].date, 9), lastEdited: addDays(C.sessions[7].date, 9) });
+  st.entries[items[7].id].history[0].at = st.entries[items[7].id].writtenOn;
+  return st;
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    return s && s.setup && s.plan && s.entries ? s : null;
+  } catch (e) { return null; }
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+function calc(){
+  const k = JSON.stringify(state.setup);
+  if (k !== cacheKey) { cacheKey = k; cacheVal = calcFor(state.setup); }
+  return cacheVal;
+}
+
+/* ---------- derived rows ---------- */
+function getRows(){
+  const C = calc(), rows = [];
+  state.plan.items.forEach((it, i) => {
+    const s = C.sessions[i], e = state.entries[it.id] || null;
+    rows.push({ key: it.id, kind: 'planned', item: it, n: i + 1, date: e ? e.sessionDate : (s ? s.date : null), hours: e ? e.hours : (s ? s.hours : null), entry: e });
+  });
+  Object.keys(state.entries).forEach(k => {
+    const e = state.entries[k];
+    if (!e.itemId) rows.push({ key: e.key, kind: 'unplanned', item: null, n: null, date: e.sessionDate, hours: e.hours, entry: e });
+  });
+  rows.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'));
+  return rows;
+}
+const isPending = r => r.kind === 'planned' && r.date && r.date <= state.today && !r.entry;
+const lateDays = e => e ? Math.max(0, daysBetween(e.sessionDate, e.writtenOn)) : 0;
+function statusChip(e){
+  if (!e) return '<span class="chip none">No note</span>';
+  const s = ST[e.status];
+  return '<span class="chip ' + s.cls + '">' + s.label + '</span>';
+}
+
+/* ---------- chrome ---------- */
+const TABS = [['setup', 'Setup'], ['plan', 'Plan'], ['log', 'Log'], ['export', 'Export']];
+function renderChrome(){
+  const rows = getRows(), p = rows.filter(isPending).length;
+  $('#tabs').innerHTML = TABS.map(t =>
+    '<button class="tab" role="tab" data-act="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] +
+    (t[0] === 'log' && p ? '<span class="count" title="Sessions with no note">' + p + '</span>' : '') + '</button>').join('');
+  $('#h-title').textContent = state.setup.name || 'Class progress';
+  const C = calc(), wk = Object.keys(state.setup.hours).reduce((a, k) => a + (Number(state.setup.hours[k]) || 0), 0);
+  $('#h-sub').textContent = 'School year ' + state.setup.start.slice(0, 4) + '–' + state.setup.end.slice(2, 4) + ' · ' + num(wk) + ' h per week · ' + C.sessions.length + ' sessions available';
+  $('#demo-date').value = state.today;
+}
+function render(){
+  renderChrome();
+  const v = $('#view');
+  if (state.tab === 'setup') v.innerHTML = renderSetup();
+  else if (state.tab === 'plan') v.innerHTML = renderPlan();
+  else if (state.tab === 'export') v.innerHTML = renderExport();
+  else v.innerHTML = renderLog();
+  if (state.tab === 'setup') updateSetupOutputs();
+}
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), 2800);
+}
+
+/* ---------- capacity ---------- */
+function capacity(){
+  const C = calc(), items = state.plan.items;
+  const ph = items.reduce((a, i) => a + (Number(i.hours) || 0), 0);
+  const spare = C.sessions.length - items.length;
+  const bad = spare < 0 || ph > C.hours;
+  let msg;
+  if (!C.ok) msg = 'Set valid start and end dates to compare the plan with the calendar.';
+  else msg = 'Plan needs <b>' + items.length + ' sessions / ' + num(ph) + ' h</b>; the calendar provides <b>' + C.sessions.length + ' sessions / ' + num(C.hours) + ' h</b>. ' +
+    (spare < 0 ? (-spare) + ' plan item' + (spare === -1 ? ' has' : 's have') + ' no session left.' : spare + ' spare session' + (spare === 1 ? '' : 's') + (ph > C.hours ? ', but the hours do not fit.' : ' for revision or setbacks.'));
+  return { bad: !C.ok || bad, html: msg };
+}
+
+/* ---------- SETUP ---------- */
+function renderSetup(){
+  const s = state.setup;
+  const hi = [1, 2, 3, 4, 5].map(d => '<div><div class="dn">' + DOW[d] + '</div><input type="number" min="0" max="8" step="0.5" id="s-h' + d + '" value="' + esc(s.hours[d]) + '" aria-label="Hours on ' + DOW[d] + '"></div>').join('');
+  return '<div class="cols">' +
+    '<div class="stack">' +
+      '<section class="card pad stack"><h2>Course</h2>' +
+        '<div><label class="f" for="s-name">Name</label><input type="text" id="s-name" value="' + esc(s.name) + '"></div>' +
+        '<div class="row-flex"><div style="flex:1;min-width:140px"><label class="f" for="s-start">First class</label><input type="date" id="s-start" value="' + esc(s.start) + '"></div>' +
+        '<div style="flex:1;min-width:140px"><label class="f" for="s-end">Last class</label><input type="date" id="s-end" value="' + esc(s.end) + '"></div></div>' +
+      '</section>' +
+      '<section class="card pad stack"><h2>Weekly timetable</h2><div><div class="hours-grid">' + hi + '</div><p class="hint">Hours taught each weekday. 0 means no class.</p></div></section>' +
+      '<section class="card pad stack"><h2>Holidays and non-teaching days</h2>' +
+        '<div><label class="f" for="s-hol">One per line</label><textarea id="s-hol" rows="8" class="mono" spellcheck="false">' + esc(s.holidays) + '</textarea>' +
+        '<p class="hint">A single date (<span class="mono">2026-12-07</span>) or a period (<span class="mono">2026-12-23 to 2027-01-06</span>), optional label after it. <span class="mono">dd/mm/yyyy</span> also works. Paste from the school calendar.</p></div>' +
+      '</section>' +
+    '</div>' +
+    '<div class="stack" id="setup-out"></div></div>';
+}
+function updateSetupOutputs(){
+  const out = $('#setup-out'); if (!out) return;
+  const C = calc(), s = state.setup, cap = capacity();
+  let h = '<section class="card pad stack"><h2>Calendar generated</h2>';
+  if (!C.ok) h += '<p class="err">Enter a first and last class date (last class after first).</p>';
+  else {
+    const weeks = new Set(C.sessions.map(x => { const d = fromISO(x.date); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return toISO(d); })).size;
+    h += '<div class="stats"><div class="stat"><div class="v">' + C.sessions.length + '</div><div class="l">sessions</div></div>' +
+      '<div class="stat"><div class="v">' + num(C.hours) + '</div><div class="l">hours</div></div>' +
+      '<div class="stat"><div class="v">' + weeks + '</div><div class="l">teaching weeks</div></div></div>' +
+      '<div class="banner ' + (cap.bad ? 'warn' : 'ok') + '">' + (cap.bad ? WARN : CHECK) + '<p>' + cap.html + '</p></div>';
+  }
+  h += '</section>';
+  h += '<section class="card pad stack"><h2>Holidays read</h2>';
+  if (!C.hols.length) h += '<p class="muted">No holidays entered.</p>';
+  else h += '<ul class="hol-list">' + C.hols.map(x => x.error
+    ? '<li><span class="chip bad">Line ' + x.line + '</span><span class="mono">' + esc(x.raw) + '</span><span class="err">' + esc(x.error) + '</span></li>'
+    : '<li><span class="mono nowrap">' + (x.start === x.end ? fmtY(x.start) : fmt(x.start) + ' → ' + fmtY(x.end)) + '</span>' +
+      '<span>' + esc(x.label || '') + '</span>' +
+      (x.lost ? '<span class="chip warn">−' + x.lost + ' session' + (x.lost > 1 ? 's' : '') + '</span>' : '<span class="chip none">no class lost</span>') + '</li>').join('') + '</ul>';
+  h += '</section>';
+  if (C.ok) h += '<section class="card pad stack"><h2>Year at a glance</h2><div class="months">' + monthsHTML(C, s) + '</div>' +
+    '<div class="legend"><span><i class="sw t"></i>Teaching day</span><span><i class="sw h"></i>Holiday</span><span><i class="sw l"></i>Holiday on a teaching day (session lost)</span></div></section>';
+  out.innerHTML = h;
+}
+function monthsHTML(C, s){
+  let y = +s.start.slice(0, 4), m = +s.start.slice(5, 7) - 1;
+  const ey = +s.end.slice(0, 4), em = +s.end.slice(5, 7) - 1;
+  let html = '';
+  while (y < ey || (y === ey && m <= em)) {
+    const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const lead = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7;
+    let cells = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(x => '<i>' + x + '</i>').join('') + '<span></span>'.repeat(lead);
+    let cnt = 0;
+    for (let d = 1; d <= dim; d++) {
+      const iso = y + '-' + pad(m + 1) + '-' + pad(d);
+      const inR = iso >= s.start && iso <= s.end;
+      const h = Number(s.hours[fromISO(iso).getUTCDay()]) || 0;
+      const hol = C.holMap.has(iso);
+      let cls = '', tip = fmt(iso);
+      if (!inR) cls = 'out';
+      else if (hol) { cls = h > 0 ? 'hol lost' : 'hol'; tip += ' · holiday'; }
+      else if (h > 0) { cls = 'teach'; tip += ' · ' + num(h) + ' h'; cnt++; }
+      cells += '<b class="' + cls + '" title="' + esc(tip) + '">' + d + '</b>';
+    }
+    html += '<div class="month"><h3>' + MON[m] + ' ' + y + '<span>' + cnt + ' ses.</span></h3><div class="cal">' + cells + '</div></div>';
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  return html;
+}
+
+/* ---------- LOG ---------- */
+function renderLog(){
+  const rows = getRows(), C = calc();
+  const pend = rows.filter(isPending);
+  const rec = rows.filter(r => r.entry).slice().reverse();
+  const up = rows.filter(r => r.kind === 'planned' && !r.entry && !isPending(r));
+  const lists = { pending: pend, recorded: rec, upcoming: up.slice(0, 15), all: rows };
+  if (!lists[state.filter]) state.filter = 'pending';
+  const list = lists[state.filter];
+  let sel = null;
+  if (state.sel === 'new') sel = { key: 'new', kind: 'new', date: state.today, hours: null, entry: null };
+  else sel = rows.find(r => r.key === state.sel) || null;
+  if (!sel) { sel = list[0] || rows.find(isPending) || null; state.sel = sel ? sel.key : null; }
+
+  const fbtn = (k, l, n) => '<button data-act="filter" data-f="' + k + '" aria-pressed="' + (state.filter === k) + '">' + l + (n != null ? ' ' + n : '') + '</button>';
+  let li = list.map(r => {
+    const e = r.entry, late = lateDays(e);
+    const chips = (e ? statusChip(e) : (r.date ? '<span class="chip ' + (r.date <= state.today ? 'bad' : 'none') + '">' + (r.date <= state.today ? 'No note' : 'Upcoming') + '</span>' : '<span class="chip warn">No session left</span>')) +
+      (late ? '<span class="chip warn" title="Written after the session date">Late +' + late + ' d</span>' : '') +
+      (e && e.carry ? '<span class="chip accent">↪ carries over</span>' : '');
+    return '<li><button class="srow" data-act="sel" data-key="' + esc(r.key) + '" aria-current="' + (sel && sel.key === r.key) + '">' +
+      '<span class="d">' + (r.date ? fmt(r.date) : '—') + '<small>' + (r.hours ? num(r.hours) + ' h' : '') + '</small></span>' +
+      '<span class="t">' + (r.n ? '#' + r.n + ' · ' : '') + esc(r.item ? r.item.topic : e.text) + '</span>' +
+      '<span class="c">' + chips + '</span></button></li>';
+  }).join('');
+  if (!li) li = '<li class="empty">' + (state.filter === 'pending' ? 'Every past session has a note.' : 'Nothing here.') + '</li>';
+
+  return '<div class="split">' +
+    '<section class="card"><div class="list-head"><h2>Sessions</h2><button class="btn small" data-act="new-unplanned">+ Unplanned session</button></div>' +
+    '<div class="filter">' + fbtn('pending', 'No note', pend.length) + fbtn('recorded', 'Recorded', rec.length) + fbtn('upcoming', 'Upcoming') + fbtn('all', 'All') + '</div>' +
+    '<ul class="sess">' + li + '</ul></section>' +
+    '<section class="card pad stack" id="editor">' + (sel ? renderEditor(sel, rows) : '<p class="empty">Select a session.</p>') + '</section></div>';
+}
+function renderEditor(r, rows){
+  const e = r.entry, isNew = r.kind === 'new', planned = r.kind === 'planned';
+  const status = e ? e.status : (planned ? 'done' : 'added');
+  let h = '<div class="ed-top"><div><div class="eyebrow">' + (planned ? 'Planned session' : 'Unplanned session') + '</div>' +
+    (isNew ? '<div><label class="f" for="f-date">Date</label><input type="date" id="f-date" value="' + esc(r.date) + '" style="width:180px"></div>'
+           : '<h2 class="mono" style="font-size:19px">' + fmtY(r.date) + '</h2>') + '</div>' +
+    '<div class="muted mono">' + (r.hours ? num(r.hours) + ' h' : '') + (r.n ? ' · item #' + r.n : '') + (r.item && r.item.week ? ' · week ' + esc(r.item.week) : '') + '</div></div>';
+  if (planned) {
+    h += '<div class="plan-box">' + LOCK + '<div><div class="eyebrow">Plan, approved ' + fmtY(state.plan.approvedOn) + '</div><div>' + esc(r.item.topic) + '</div><div class="muted">' + esc(r.item.unit) + (r.item.note ? ' · ' + esc(r.item.note) : '') + '</div></div></div>';
+    const prev = rows.find(x => x.kind === 'planned' && x.n === r.n - 1);
+    if (prev && prev.entry && prev.entry.status === 'partial' && prev.entry.carry)
+      h += '<div class="banner warn">' + WARN + '<p><b>Left over from #' + prev.n + ' (' + fmt(prev.date) + '):</b> ' + esc(prev.entry.text) + '</p></div>';
+  }
+  const opts = planned ? ['done', 'partial', 'not_done'] : ['added'];
+  h += '<fieldset class="seg"><legend>Status</legend>' + opts.map(k =>
+    '<label class="segopt s-' + k + '"><input type="radio" name="f-status" value="' + k + '"' + (status === k ? ' checked' : '') + '>' + ST[k].label + '</label>').join('') +
+    (planned ? '<span class="segopt v2" title="Planned for version 2">Move / cancel · v2</span>' : '') + '</fieldset>';
+  h += '<div><label class="f" for="f-text">What was done</label><textarea id="f-text" rows="5" placeholder="Contents, activities, exercises, materials…">' + esc(e ? e.text : '') + '</textarea>' +
+    '<p class="hint">In Moodle this is a rich-text editor with attachments.</p></div>';
+  h += '<div id="reason-wrap"' + (status === 'done' || status === 'added' ? ' hidden' : '') + '><label class="f" for="f-reason">Why it differs from the plan</label><div class="reason-grid">' +
+    '<select id="f-reason"><option value="">Choose a reason…</option>' + REASONS.map(x => '<option' + (e && e.reason === x ? ' selected' : '') + '>' + esc(x) + '</option>').join('') + '</select>' +
+    '<input type="text" id="f-reasonnote" placeholder="Details (optional)" value="' + esc(e ? e.reasonNote : '') + '"></div></div>';
+  h += '<label id="carry-wrap"' + (status === 'partial' ? '' : ' hidden') + '><input type="checkbox" id="f-carry"' + (e && e.carry ? ' checked' : '') + '> Continue what is left in the next session</label>';
+  const sd = isNew ? state.today : r.date, wr = e ? e.writtenOn : state.today, late = daysBetween(sd, wr);
+  h += '<div class="stamp"><span>Session date <b class="mono">' + fmt(sd) + '</b></span>' +
+    '<span>' + (e ? 'Written on' : 'Writing on') + ' <b class="mono">' + fmt(wr) + '</b></span>' +
+    (late > 0 ? '<span class="chip warn">Late +' + late + ' d</span>' : '<span class="chip done">On the day</span>') +
+    (e && e.lastEdited !== e.writtenOn ? '<span>Last edited <b class="mono">' + fmt(e.lastEdited) + '</b></span>' : '') + '</div>';
+  h += '<div class="row-flex"><button class="btn primary" data-act="save" data-key="' + esc(r.key) + '">' + (e ? 'Update entry' : 'Save entry') + '</button><span class="err" id="f-err" role="alert"></span></div>';
+  if (e) h += '<details class="hist"><summary>Revision history (' + e.history.length + ')</summary><ol>' +
+    e.history.map(x => '<li><span class="mono">' + fmtY(x.at) + '</span> · ' + ST[x.status].label + ' · ' + esc(x.text.length > 70 ? x.text.slice(0, 70) + '…' : x.text) + '</li>').join('') + '</ol></details>';
+  return h;
+}
+function saveEntry(key){
+  const rows = getRows();
+  const isNew = key === 'new';
+  const row = isNew ? { kind: 'new', date: $('#f-date').value, hours: null } : rows.find(r => r.key === key);
+  if (!row) return;
+  const err = m => { $('#f-err').textContent = m; };
+  const stEl = document.querySelector('input[name="f-status"]:checked');
+  const status = stEl ? stEl.value : null;
+  const text = $('#f-text').value.trim();
+  if (!status) return err('Choose a status.');
+  if (isNew && !validISO(row.date)) return err('Choose the date of the session.');
+  if (!text) return err('Write what was done.');
+  const reason = $('#f-reason') ? $('#f-reason').value : '';
+  if ((status === 'partial' || status === 'not_done') && !reason) return err('A reason is required when the session differs from the plan.');
+  const now = state.today;
+  let e = isNew ? null : state.entries[key];
+  if (!e) {
+    const k = isNew ? 'u' + Date.now() : key;
+    e = { key: k, itemId: isNew ? null : row.item.id, sessionDate: row.date, hours: row.hours, writtenOn: now, history: [] };
+  }
+  e.status = status; e.text = text;
+  e.reason = status === 'done' || status === 'added' ? '' : reason;
+  e.reasonNote = status === 'done' || status === 'added' ? '' : $('#f-reasonnote').value.trim();
+  e.carry = status === 'partial' && $('#f-carry').checked;
+  e.lastEdited = now;
+  e.history.push({ at: now, status, text });
+  state.entries[e.key] = e;
+  save();
+  const nextP = getRows().filter(isPending)[0];
+  state.sel = nextP && state.filter === 'pending' ? nextP.key : e.key;
+  render();
+  toast('Saved' + (daysBetween(e.sessionDate, e.writtenOn) > 0 ? ' · flagged as written late' : ''));
+}
+
+/* ---------- PLAN ---------- */
+function renderPlan(){
+  if (imp) return renderImport();
+  const p = state.plan, cap = capacity(), C = calc();
+  const units = Array.from(new Set(p.items.map(i => i.unit)));
+  const rows = getRows().filter(r => r.kind === 'planned' && (!state.unitFilter || r.item.unit === state.unitFilter));
+  const ph = p.items.reduce((a, i) => a + (Number(i.hours) || 0), 0);
+  return '<div class="stack">' +
+    '<div class="banner">' + LOCK + '<div><b>Approved plan, locked.</b> <span class="muted">' + esc(p.source) + ' · ' + p.items.length + ' items · ' + num(ph) + ' h · approved ' + fmtY(p.approvedOn) + '. Nobody can edit it. Changes (moving or cancelling a session) arrive in version 2 as separate adjustments.</span></div></div>' +
+    '<div class="banner ' + (cap.bad ? 'warn' : 'ok') + '">' + (cap.bad ? WARN : CHECK) + '<p>' + cap.html + '</p></div>' +
+    '<div class="row-flex"><div><label class="f" for="u-filter">Unit</label><select id="u-filter" style="width:auto;min-width:240px"><option value="">All units</option>' +
+      units.map(u => '<option' + (state.unitFilter === u ? ' selected' : '') + '>' + esc(u) + '</option>').join('') + '</select></div>' +
+      '<div style="margin-left:auto"><button class="btn" data-act="try-import">Try the import flow</button></div></div>' +
+    '<div class="tablewrap tall"><table><thead><tr><th class="num">#</th><th>Session</th><th class="num">Wk</th><th>Unit</th><th>Planned content</th><th class="num">h</th><th>Log</th></tr></thead><tbody>' +
+    rows.map(r => '<tr><td class="num mono">' + r.n + '</td><td class="mono nowrap">' + (r.date ? fmt(r.date) : '<span class="chip warn">none left</span>') + '</td><td class="num mono">' + esc(r.item.week || '') + '</td><td>' + esc(r.item.unit) +
+      '</td><td>' + esc(r.item.topic) + (r.item.note ? ' <span class="chip accent">' + esc(r.item.note) + '</span>' : '') + '</td><td class="num mono">' + esc(r.item.hours == null ? '' : r.item.hours) + '</td><td>' +
+      (r.entry ? statusChip(r.entry) : (isPending(r) ? '<span class="chip bad">No note</span>' : '')) + '</td></tr>').join('') +
+    '</tbody></table></div></div>';
+}
+
+/* import wizard */
+const FIELDS = [
+  { k: 'topic', label: 'Session content', req: true, syn: ['contingut', 'contenido', 'content', 'descrip', 'sessi', 'activitat', 'topic', 'tema'] },
+  { k: 'hours', label: 'Hours', syn: ['hor', 'hours'], exact: ['h'] },
+  { k: 'week', label: 'Week', syn: ['sem', 'week'] },
+  { k: 'unit', label: 'Unit / block', syn: ['uf', 'unitat', 'unidad', 'unit', 'bloc', 'bloque', 'mòdul', 'modul'] },
+  { k: 'note', label: 'Notes', syn: ['obs', 'nota', 'comment'] }
+];
+function guessMapping(headers){
+  const used = {}, map = {};
+  FIELDS.forEach(f => {
+    map[f.k] = -1;
+    headers.forEach((h, i) => {
+      if (map[f.k] > -1 || used[i]) return;
+      const n = String(h).toLowerCase().trim();
+      if (f.syn.some(s => n.indexOf(s) > -1) || (f.exact || []).indexOf(n) > -1) { map[f.k] = i; used[i] = true; }
+    });
+  });
+  return map;
+}
+function exampleFile(){
+  const rows = samplePlanRows().map(r => [r.week, r.unit, r.topic, r.hours, r.note]);
+  rows.splice(40, 0, ['', '', '', '', '']);
+  rows[60][3] = 'pendent';
+  return { fileName: 'pla-anual-2n-eso-b.xlsx', headers: ['Sem.', 'Bloc', 'Descripció de l\'activitat', 'Hores', 'Observacions'], data: rows };
+}
+function applyMapping(){
+  const m = imp.mapping, items = [], warns = [];
+  let skipped = 0;
+  imp.data.forEach((r, i) => {
+    const g = k => m[k] > -1 ? String(r[m[k]] == null ? '' : r[m[k]]).trim() : '';
+    const topic = g('topic');
+    if (!topic) { if (r.some(c => String(c).trim())) warns.push('Row ' + (i + 2) + ': no content, skipped.'); skipped++; return; }
+    let hours = null;
+    const hv = g('hours');
+    if (hv) { const x = parseFloat(hv.replace(',', '.')); if (isNaN(x)) warns.push('Row ' + (i + 2) + ': hours "' + hv + '" is not a number, left empty.'); else hours = x; }
+    items.push({ id: 'p' + (items.length + 1), week: g('week'), unit: g('unit') || '—', topic, hours, note: g('note') });
+  });
+  return { items, warns, skipped };
+}
+function renderImport(){
+  const steps = ['File', 'Map columns', 'Check', 'Approve'];
+  let h = '<div class="stack"><div class="row-flex" style="justify-content:space-between"><div class="steps">' +
+    steps.map((s, i) => '<span class="' + (imp.step === i + 1 ? 'on' : imp.step > i + 1 ? 'past' : '') + '">' + (i + 1) + '. ' + s + '</span>').join('') +
+    '</div><button class="btn small" data-act="imp-cancel">Cancel import</button></div>';
+  if (imp.step === 1) {
+    h += '<section class="card pad stack"><h2>Choose the year plan</h2><div class="dropzone"><p>Excel file with one row per planned session.</p><p style="margin-top:10px"><input type="file" id="imp-file" accept=".xlsx,.xls,.csv"></p></div>' +
+      '<div class="row-flex"><span class="muted">No file at hand?</span><button class="btn" data-act="imp-example">Load an example plan</button></div>' +
+      (imp.error ? '<p class="err">' + esc(imp.error) + '</p>' : '') + '</section>';
+  } else if (imp.step === 2) {
+    const used = FIELDS.map(f => imp.mapping[f.k]);
+    h += '<section class="card pad"><h2>Match your columns</h2><p class="muted" style="margin:4px 0 8px">' + esc(imp.fileName) + ' · ' + imp.data.length + ' rows. Suggestions are filled in from the headers. The mapping can be saved per plan.</p>' +
+      FIELDS.map(f => {
+        const idx = imp.mapping[f.k];
+        const sample = idx > -1 ? imp.data.slice(0, 3).map(r => String(r[idx] == null ? '' : r[idx])).filter(Boolean).map(x => '“' + esc(x.length > 34 ? x.slice(0, 34) + '…' : x) + '”').join('  ') : '';
+        return '<div class="map-row"><div><b>' + f.label + '</b>' + (f.req ? ' <span class="chip bad">required</span>' : '') + '</div>' +
+          '<select data-map="' + f.k + '" aria-label="Column for ' + f.label + '"><option value="-1">— not in my file —</option>' +
+          imp.headers.map((x, i) => '<option value="' + i + '"' + (idx === i ? ' selected' : '') + '>' + esc(x || 'Column ' + (i + 1)) + '</option>').join('') + '</select>' +
+          '<div class="muted mono" style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis">' + sample + '</div></div>';
+      }).join('') +
+      (imp.headers.some((x, i) => used.indexOf(i) < 0) ? '<p class="hint" style="margin-top:8px">Not imported: ' + imp.headers.map((x, i) => used.indexOf(i) < 0 ? esc(x || 'Column ' + (i + 1)) : null).filter(Boolean).join(', ') + '</p>' : '') +
+      '<div class="row-flex" style="margin-top:12px"><button class="btn" data-act="imp-back">Back</button><button class="btn primary" data-act="imp-next"' + (imp.mapping.topic < 0 ? ' disabled' : '') + '>Check the plan</button>' +
+      (imp.mapping.topic < 0 ? '<span class="err">Choose the column with the session content.</span>' : '') + '</div></section>';
+  } else {
+    const r = applyMapping(), C = calc();
+    const ph = r.items.reduce((a, i) => a + (Number(i.hours) || 0), 0), spare = C.sessions.length - r.items.length;
+    if (imp.step === 3) {
+      h += '<section class="card pad stack"><h2>Check before approving</h2><div class="tiles">' +
+        '<div class="tile"><div class="v">' + r.items.length + '</div><div class="l">sessions read</div></div>' +
+        '<div class="tile"><div class="v">' + num(ph) + '</div><div class="l">planned hours</div></div>' +
+        '<div class="tile"><div class="v">' + r.warns.length + '</div><div class="l">warnings</div></div>' +
+        '<div class="tile"><div class="v">' + (spare >= 0 ? '+' : '') + spare + '</div><div class="l">spare sessions in calendar</div></div></div>' +
+        (spare < 0 ? '<div class="banner warn">' + WARN + '<p>' + (-spare) + ' item(s) will not fit in the calendar.</p></div>' : '<div class="banner ok">' + CHECK + '<p>All items fit in the calendar (' + C.sessions.length + ' sessions / ' + num(C.hours) + ' h).</p></div>') +
+        (r.warns.length ? '<div><h3>Warnings</h3><ul style="margin:6px 0 0;padding-left:18px">' + r.warns.slice(0, 6).map(w => '<li>' + esc(w) + '</li>').join('') + (r.warns.length > 6 ? '<li>…and ' + (r.warns.length - 6) + ' more</li>' : '') + '</ul></div>' : '') +
+        '<div class="tablewrap"><table><thead><tr><th>Wk</th><th>Unit</th><th>Content</th><th class="num">h</th></tr></thead><tbody>' +
+        r.items.slice(0, 6).map(i => '<tr><td class="mono">' + esc(i.week) + '</td><td>' + esc(i.unit) + '</td><td>' + esc(i.topic) + '</td><td class="num mono">' + esc(i.hours == null ? '' : i.hours) + '</td></tr>').join('') +
+        '</tbody></table></div><p class="hint">First 6 of ' + r.items.length + ' rows.</p>' +
+        '<div class="row-flex"><button class="btn" data-act="imp-back">Back</button><button class="btn primary" data-act="imp-next">Continue to approval</button></div></section>';
+    } else {
+      h += '<section class="card pad stack"><h2>Approve and lock</h2><div class="banner warn">' + LOCK + '<p>After approval the plan cannot be edited or replaced, so the inspector sees exactly what was agreed. Until you approve, it is a draft.</p></div>' +
+        '<p><b>' + r.items.length + ' sessions · ' + num(ph) + ' h</b> from ' + esc(imp.fileName) + '.</p>' +
+        '<p class="hint">Demo only: approving here replaces the sample plan and clears the sample notes. Use “Reset demo data” to get them back.</p>' +
+        '<div class="row-flex"><button class="btn" data-act="imp-back">Back</button><button class="btn primary" data-act="imp-approve">Approve and lock plan</button></div></section>';
+    }
+  }
+  return h + '</div>';
+}
+function startImport(file){
+  if (typeof XLSX === 'undefined') { imp.error = 'The spreadsheet reader did not load (offline?). Use the example plan instead.'; render(); return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const wb = XLSX.read(new Uint8Array(rd.result), { type: 'array' });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      const hi = aoa.findIndex(r => r.some(c => String(c).trim()));
+      if (hi < 0) throw new Error('The first sheet is empty.');
+      imp.fileName = file.name; imp.headers = aoa[hi].map(String); imp.data = aoa.slice(hi + 1);
+      imp.mapping = guessMapping(imp.headers); imp.step = 2; imp.error = '';
+    } catch (e) { imp.error = 'Could not read that file: ' + e.message; }
+    render();
+  };
+  rd.onerror = () => { imp.error = 'Could not read that file.'; render(); };
+  rd.readAsArrayBuffer(file);
+}
+
+/* ---------- EXPORT ---------- */
+function exportData(){
+  const rows = getRows().filter(r => state.scope === 'all' || r.kind !== 'planned' || (r.date && r.date <= state.today));
+  const head = ['#', 'Planned date', 'Unit', 'Planned content', 'Planned h', 'Status', 'Actual date', 'What was done', 'Deviation reason', 'Written on', 'Late (days)'];
+  const body = rows.map(r => {
+    const e = r.entry;
+    const st = e ? ST[e.status].label : (r.kind === 'planned' && isPending(r) ? 'No note' : 'Upcoming');
+    return [r.n || '', r.kind === 'planned' ? (r.date || '') : '', r.item ? r.item.unit : '', r.item ? r.item.topic : '', r.item && r.item.hours != null ? r.item.hours : '',
+      st, e ? e.sessionDate : '', e ? e.text : '', e && e.reason ? e.reason + (e.reasonNote ? ' — ' + e.reasonNote : '') : '', e ? e.writtenOn : '', e ? lateDays(e) : ''];
+  });
+  const due = getRows().filter(r => r.kind === 'planned' && r.date && r.date <= state.today);
+  const cnt = { done: 0, partial: 0, not_done: 0, none: 0 }, hrs = { plan: 0, done: 0 };
+  due.forEach(r => { hrs.plan += Number(r.item.hours) || 0; if (r.entry) { cnt[r.entry.status]++; if (r.entry.status === 'done') hrs.done += Number(r.item.hours) || 0; } else cnt.none++; });
+  return { head, body, due: due.length, cnt, hrs, late: due.filter(r => lateDays(r.entry) > 0).length };
+}
+function renderExport(){
+  const x = exportData(), t = x.due || 1;
+  const pc = k => (x.cnt[k] / t * 100).toFixed(2) + '%';
+  return '<div class="stack">' +
+    '<section class="card pad stack"><div class="row-flex" style="justify-content:space-between"><h2>Plan vs done up to ' + fmtY(state.today) + '</h2>' +
+    '<div class="row-flex"><label for="scope" class="muted">Rows</label><select id="scope" style="width:auto"><option value="todate"' + (state.scope === 'todate' ? ' selected' : '') + '>Up to the demo date</option><option value="all"' + (state.scope === 'all' ? ' selected' : '') + '>Whole year</option></select></div></div>' +
+    '<div class="tiles"><div class="tile"><div class="v">' + x.due + '</div><div class="l">sessions due</div></div>' +
+    '<div class="tile"><div class="v">' + x.cnt.done + '</div><div class="l">done</div></div>' +
+    '<div class="tile"><div class="v">' + x.cnt.partial + '</div><div class="l">partly done</div></div>' +
+    '<div class="tile"><div class="v">' + x.cnt.not_done + '</div><div class="l">not done</div></div>' +
+    '<div class="tile"><div class="v">' + x.cnt.none + '</div><div class="l">no note yet</div></div>' +
+    '<div class="tile"><div class="v">' + num(x.hrs.done) + ' / ' + num(x.hrs.plan) + '</div><div class="l">hours done / due</div></div>' +
+    '<div class="tile"><div class="v">' + x.late + '</div><div class="l">written late</div></div></div>' +
+    '<div class="bar-s" role="img" aria-label="Done ' + x.cnt.done + ', partly done ' + x.cnt.partial + ', not done ' + x.cnt.not_done + ', no note ' + x.cnt.none + '"><i class="b-done" style="width:' + pc('done') + '"></i><i class="b-partial" style="width:' + pc('partial') + '"></i><i class="b-notdone" style="width:' + pc('not_done') + '"></i><i class="b-none" style="width:' + pc('none') + '"></i></div>' +
+    '<div class="legend"><span><i class="sw" style="background:var(--done)"></i>Done</span><span><i class="sw" style="background:var(--partial)"></i>Partly done</span><span><i class="sw" style="background:var(--notdone)"></i>Not done</span><span><i class="sw h"></i>No note</span></div>' +
+    '<div class="row-flex"><button class="btn primary" data-act="xlsx">Download .xlsx</button><button class="btn" data-act="copy">Copy for Excel</button>' +
+    '<span class="hint" style="margin:0">Downloads work when this file is opened directly in a browser. The claude.ai preview blocks them, so use Copy and paste into a sheet.</span></div></section>' +
+    '<div class="tablewrap tall"><table><thead><tr>' + x.head.map((c, i) => '<th' + (i === 0 || i === 4 || i === 10 ? ' class="num"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>' +
+    x.body.map(r => '<tr>' + r.map((c, i) => {
+      if (i === 5) return '<td>' + (c === 'No note' ? '<span class="chip bad">No note</span>' : c === 'Upcoming' ? '<span class="chip none">Upcoming</span>' : '<span class="chip ' + (c === 'Done' ? 'done' : c === 'Partly done' ? 'partial' : c === 'Not done' ? 'notdone' : 'added') + '">' + esc(c) + '</span>') + '</td>';
+      if (i === 1 || i === 6 || i === 9) return '<td class="mono nowrap">' + (c ? fmt(c) : '') + '</td>';
+      return '<td' + (i === 0 || i === 4 || i === 10 ? ' class="num mono"' : '') + '>' + esc(c) + '</td>';
+    }).join('') + '</tr>').join('') + '</tbody></table></div></div>';
+}
+function downloadXlsx(){
+  if (typeof XLSX === 'undefined') { toast('Spreadsheet library not loaded'); return; }
+  try {
+    const x = exportData(), C = calc();
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([x.head].concat(x.body)), 'Plan vs done');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Course', state.setup.name], ['Generated for', state.today], ['Sessions due', x.due], ['Done', x.cnt.done], ['Partly done', x.cnt.partial],
+      ['Not done', x.cnt.not_done], ['No note', x.cnt.none], ['Hours done', x.hrs.done], ['Hours due', x.hrs.plan], ['Written late', x.late],
+      ['Calendar sessions', C.sessions.length], ['Calendar hours', C.hours]]), 'Summary');
+    XLSX.writeFile(wb, 'class-progress-' + state.today + '.xlsx');
+    toast('Download started. If nothing arrives, use Copy for Excel.');
+  } catch (e) { toast('Could not build the file'); }
+}
+function copyTsv(){
+  const x = exportData();
+  const tsv = [x.head].concat(x.body).map(r => r.map(c => String(c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+  const fallback = () => {
+    const ta = document.createElement('textarea'); ta.value = tsv; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove();
+    toast(ok ? 'Copied. Paste into a spreadsheet.' : 'Copy was blocked');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tsv).then(() => toast('Copied. Paste into a spreadsheet.'), fallback);
+  else fallback();
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-act]'); if (!t) return;
+  const a = t.dataset.act;
+  if (a === 'tab') { state.tab = t.dataset.tab; save(); render(); }
+  else if (a === 'filter') { state.filter = t.dataset.f; state.sel = null; render(); }
+  else if (a === 'sel') { state.sel = t.dataset.key; render(); }
+  else if (a === 'new-unplanned') { state.sel = 'new'; state.filter = 'all'; render(); }
+  else if (a === 'save') saveEntry(t.dataset.key);
+  else if (a === 'reset') { state = defaultState(); imp = null; save(); render(); toast('Demo data restored'); }
+  else if (a === 'try-import') { imp = { step: 1, headers: [], data: [], mapping: {}, fileName: '', error: '' }; render(); }
+  else if (a === 'imp-cancel') { imp = null; render(); }
+  else if (a === 'imp-example') { const f = exampleFile(); imp.fileName = f.fileName; imp.headers = f.headers; imp.data = f.data; imp.mapping = guessMapping(f.headers); imp.step = 2; render(); }
+  else if (a === 'imp-back') { imp.step = Math.max(1, imp.step - 1); render(); }
+  else if (a === 'imp-next') { imp.step++; render(); }
+  else if (a === 'imp-approve') {
+    const r = applyMapping();
+    state.plan = { status: 'approved', approvedOn: state.today, source: imp.fileName, items: r.items };
+    state.entries = {}; state.sel = null; imp = null; save(); render(); toast('Plan approved and locked');
+  }
+  else if (a === 'xlsx') downloadXlsx();
+  else if (a === 'copy') copyTsv();
+});
+document.addEventListener('change', ev => {
+  const t = ev.target;
+  if (t.name === 'f-status') {
+    const v = t.value;
+    $('#reason-wrap').hidden = (v === 'done' || v === 'added');
+    $('#carry-wrap').hidden = v !== 'partial';
+  } else if (t.id === 'demo-date') { if (validISO(t.value)) { state.today = t.value; state.sel = null; save(); render(); } }
+  else if (t.id === 'u-filter') { state.unitFilter = t.value; render(); }
+  else if (t.id === 'scope') { state.scope = t.value; render(); }
+  else if (t.id === 'imp-file') { if (t.files && t.files[0]) startImport(t.files[0]); }
+  else if (t.dataset.map) { imp.mapping[t.dataset.map] = Number(t.value); render(); }
+});
+document.addEventListener('input', ev => {
+  const id = ev.target.id || '', s = state.setup;
+  if (id.indexOf('s-') !== 0) return;
+  if (id === 's-name') { s.name = ev.target.value; $('#h-title').textContent = s.name || 'Class progress'; }
+  else if (id === 's-start') s.start = ev.target.value;
+  else if (id === 's-end') s.end = ev.target.value;
+  else if (id === 's-hol') s.holidays = ev.target.value;
+  else if (/^s-h[1-5]$/.test(id)) s.hours[id.slice(3)] = ev.target.value === '' ? 0 : Number(ev.target.value);
+  save(); updateSetupOutputs(); renderChrome();
+});
+
+state = load() || defaultState();
+render();
+})();
+</script>

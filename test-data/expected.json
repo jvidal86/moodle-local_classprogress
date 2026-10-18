@@ -1,0 +1,94 @@
+{
+  "school_year": {
+    "name": "2026-2027",
+    "start": "2026-09-14",
+    "end": "2027-06-21",
+    "evaluations": [
+      {
+        "name": "1a avaluació",
+        "start": "2026-09-14",
+        "end": "2026-11-27"
+      },
+      {
+        "name": "2a avaluació",
+        "start": "2026-11-30",
+        "end": "2027-02-26"
+      },
+      {
+        "name": "3a avaluació",
+        "start": "2027-03-01",
+        "end": "2027-06-21"
+      }
+    ]
+  },
+  "plans": {
+    "0372": {
+      "file": "plans/0372.md",
+      "code": "MP 0372",
+      "module": "Gestió de bases de dades",
+      "timetable": {
+        "0": 2,
+        "4": 2
+      },
+      "blocks": 7,
+      "days": 60,
+      "first": "2026-09-14",
+      "last": "2027-05-24",
+      "hours": 120,
+      "req": [
+        "REQ-PLN-001",
+        "REQ-PLN-003",
+        "REQ-PLN-004",
+        "REQ-PLN-009",
+        "REQ-PLN-014"
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    "0374": {
+      "file": "plans/0374.md",
+      "code": "MP 0374",
+      "module": "Administració de sistemes operatius",
+      "timetable": {
+        "0": 2,
+        "3": 2
+      },
+      "blocks": 5,
+      "days": 61,
+      "first": "2026-09-14",
+      "last": "2027-05-27",
+      "hours": 122,
+      "req": [
+        "REQ-PLN-001",
+        "REQ-PLN-003",
+        "REQ-PLN-004",
+        "REQ-PLN-009",
+        "REQ-PLN-014"
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    "0377": {
+      "file": "plans/0377.md",
+      "code": "MP 0377",
+      "module": "Administració de sistemes gestors de bases de dades",
+      "timetable": {
+        "1": 1
+      },
+      "blocks": 12,
+      "days": 27,
+      "first": "2026-10-06",
+      "last": "2027-05-18",
+      "hours": 27,
+      "req": [
+        "REQ-PLN-001",
+        "REQ-PLN-003",
+        "REQ-PLN-004",
+        "REQ-PLN-009",
+        "REQ-PLN-014"
+      ],
+      "errors": [],
+      "warnings": []
+    }
+  }
+}

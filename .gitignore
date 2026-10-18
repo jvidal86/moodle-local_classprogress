@@ -1,0 +1,7 @@
+# Development tools
+tools/host-phpunit/vendor/
+__pycache__/
+*.pyc
+.phpunit.result.cache
+# Agent worktrees
+.claude/worktrees/
