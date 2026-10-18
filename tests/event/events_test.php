@@ -29,6 +29,7 @@ namespace local_classprogress\event;
  * @covers     \local_classprogress\event\base
  * @covers     \local_classprogress\event\plan_imported
  * @covers     \local_classprogress\event\plan_approved
+ * @covers     \local_classprogress\event\entry_event
  * @covers     \local_classprogress\event\entry_created
  * @covers     \local_classprogress\event\entry_updated
  * @covers     \local_classprogress\event\entry_deleted
@@ -162,8 +163,8 @@ final class events_test extends \advanced_testcase {
         $this->assertSame((int) $records['user']->id, (int) $event->relateduserid);
         $url = new \core\url('/local/classprogress/' . $page, ['id' => $records[$urlrow]->id]);
         $this->assertSame($url->out(false), $event->get_url()->out(false));
-        $this->assertSame(get_string('event' . str_replace('_', '', substr(strrchr($class, '\\'), 1)), 'local_classprogress'),
-            $event::get_name());
+        $nameid = 'event' . str_replace('_', '', substr(strrchr($class, '\\'), 1));
+        $this->assertSame(get_string($nameid, 'local_classprogress'), $event::get_name());
         $this->assertStringContainsString("'{$records['user']->id}'", $event->get_description());
         $this->assertStringContainsString("'{$data['objectid']}'", $event->get_description());
     }
