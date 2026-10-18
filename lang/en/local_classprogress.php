@@ -23,7 +23,7 @@
  */
 
 $string['cachedef_showlink'] = 'Whether the Class progress link is shown to the current user';
-$string['classprogress:use'] = 'Keep a record of what was planned and what was done in class';
+$string['classprogress:use'] = 'Use Class progress';
 $string['evententrycreated'] = 'Entry created';
 $string['evententrydeleted'] = 'Entry deleted';
 $string['evententryupdated'] = 'Entry updated';
