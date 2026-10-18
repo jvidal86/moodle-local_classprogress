@@ -44,6 +44,23 @@ final class access_test extends \advanced_testcase {
         $this->assertSame(RISK_PERSONAL, (int) $info->riskbitmask);
         $this->assertSame(CONTEXT_COURSE, (int) $info->contextlevel);
         $this->assertSame('local_classprogress', $info->component);
+        $this->assertSame(get_string('classprogress:use', 'local_classprogress'), get_capability_string(access::CAPABILITY));
+    }
+
+    /**
+     * The link decision is kept in a session cache, which has a name in the cache administration page.
+     *
+     * @group REQ-ACC-003
+     */
+    public function test_link_cache_definition(): void {
+        $this->resetAfterTest();
+
+        $registered = \cache_config::instance()->get_definition_by_id('local_classprogress/showlink');
+        $this->assertNotEmpty($registered);
+        $definition = \cache_definition::load('local_classprogress/showlink', $registered);
+
+        $this->assertSame(\cache_store::MODE_SESSION, $definition->get_mode());
+        $this->assertSame(get_string('cachedef_showlink', 'local_classprogress'), (string) $definition->get_name());
     }
 
     /**
@@ -349,6 +366,30 @@ final class access_test extends \advanced_testcase {
         $this->assertFalse(access::show_link());
         $this->expectException(\required_capability_exception::class);
         access::require_user();
+    }
+
+    /**
+     * Nothing is cached before the upgrade has created the capability, so a teacher who browses meanwhile
+     * sees the link on the first page after the upgrade, not only after the next login.
+     *
+     * @group REQ-ACC-001
+     */
+    public function test_link_shows_right_after_the_capability_is_installed(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $DB->delete_records('capabilities', ['name' => access::CAPABILITY]);
+        \cache::make('core', 'capabilities')->purge();
+
+        $this->setUser($teacher);
+        $this->assertFalse(access::show_link());
+
+        update_capabilities('local_classprogress');
+        \cache::make('core', 'capabilities')->purge();
+
+        $this->assertTrue(access::show_link());
     }
 
     /**
