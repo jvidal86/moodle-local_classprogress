@@ -26,6 +26,7 @@ namespace local_classprogress\event;
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @group      REQ-AUD-001
  * @covers     \local_classprogress\event\base
  * @covers     \local_classprogress\event\plan_imported
  * @covers     \local_classprogress\event\plan_approved

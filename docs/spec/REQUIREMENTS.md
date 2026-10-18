@@ -171,11 +171,17 @@ A privacy export contains the user's school years, holidays, plans, items, entri
 
 ### REQ-PRV-003 Erase
 Phase: M1 · Status: agreed
-Erasing a user deletes all of their data, history included, and leaves other users' data untouched.
+Erasing a user deletes all of their data, history included, and leaves other users' data untouched. A history row belongs to the owner of its plan: when someone else acted on it (an administrator "logged in as" the teacher), that person's numeric id stays in the owner's history when that person is erased, as in Moodle's own logs (clarified 2026-10-18).
 
 ### REQ-PRV-004 Account deletion
 Phase: M1 · Status: agreed
 Deleting a user account removes their rows without waiting for a privacy request.
+
+## AUD · Audit events (M1)
+
+### REQ-AUD-001 Audit events
+Phase: M1 · Status: agreed
+Added 2026-10-18. Importing and approving a plan and creating, editing or deleting an entry each record a Moodle event in the owner's user context, carrying only ids and codes, never plan or entry text. The event classes exist and are tested in M1; their triggering is checked again in M2 (import, approval) and M3 (entries).
 
 ---
 

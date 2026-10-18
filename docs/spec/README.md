@@ -11,7 +11,7 @@ A day heading starts with a date in ISO form or dd/mm/yyyy ... (one behaviour, t
 Examples: test-data/cases/formats.md
 ```
 
-- **ID:** `REQ-<AREA>-<nnn>`. Areas: `PLN` plan format, `HOL` holidays, `CAL` calendar, `ACC` access, `OWN` ownership, `DAT` database, `PRV` privacy, `IMP` import, `LCK` approval and lock, `LOG` entries, `HIS` history, `EXP` export, `REL` release. IDs are never reused.
+- **ID:** `REQ-<AREA>-<nnn>`. Areas: `PLN` plan format, `HOL` holidays, `CAL` calendar, `ACC` access, `OWN` ownership, `DAT` database, `PRV` privacy, `IMP` import, `LCK` approval and lock, `LOG` entries, `HIS` history, `EXP` export, `REL` release, `AUD` audit events. IDs are never reused.
 - **One behaviour per requirement,** worded so a test can pass or fail on it. Prefer an example (a fixture file, a Gherkin scenario) over a paragraph.
 - **Status:** `draft` (being discussed), `agreed` (you read and accepted it), `implemented` (code and tests exist), `dropped` (kept for history, with the reason).
 - **Phase:** the phase that builds it (`M0` to `M5`).
