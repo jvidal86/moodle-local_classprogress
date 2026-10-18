@@ -61,7 +61,9 @@ final class plan_parser_test extends \basic_testcase {
             'first word is not a code' => ['Bases de dades', null, 'Bases de dades'],
             'five letters before the digits' => ['MODUL1 Programació', null, 'MODUL1 Programació'],
             'tab after a code word' => ["MP03\tProgramació", null, "MP03\tProgramació"],
-            'letters and digits of any script in a code word' => ['MP٠٣é Programació', 'MP٠٣é', 'Programació'],
+            'letters of any script after the digits' => ['MP03é Programació', 'MP03é', 'Programació'],
+            'digits other than 0-9 are not code digits' => ['MP٠٣ Programació', null, 'MP٠٣ Programació'],
+            'hash at the end of the title' => ['Programació en C#', null, 'Programació en C#'],
             'empty code before a colon' => [': Programació', '', 'Programació'],
             'closing hashes' => ['MP03 · Programació ##', 'MP03', 'Programació'],
         ];
@@ -103,6 +105,7 @@ final class plan_parser_test extends \basic_testcase {
      * A file saved with a UTF-8 byte order mark still has its module heading on line 1.
      *
      * @group REQ-PLN-001
+     * @group REQ-PLN-015
      */
     public function test_byte_order_mark_does_not_hide_module_heading(): void {
         $text = self::md('# MP01 · Saved with a byte order mark', '## RA1', '### 2026-10-05 [2h]', '- A day');
@@ -163,25 +166,67 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
-     * Heading text loses closing hashes and surrounding white space, Unicode white space included, as in the reference.
+     * Heading text loses white space at both ends, Unicode white space included, as in the reference.
      *
      * @group REQ-PLN-003
      */
     public function test_heading_text_is_trimmed_like_the_reference(): void {
         $result = self::parse(self::md(
             '# MP01 · Trimming',
-            '## Bloc 1 ##',
             "## Bloc 2\u{00A0}",
             "## Bloc 3 #\u{00A0}",
             "## Bloc 4\u{200B}",
             "## Bloc 5\x1F",
             "## Bloc 6\u{180E}",
-            '## C#',
         ));
 
-        // White space is Python's: U+001F is, U+200B and U+180E are not. The reference also drops a closing '#' that
-        // has no space before it.
-        $this->assertSame(['Bloc 1', 'Bloc 2', 'Bloc 3 #', "Bloc 4\u{200B}", 'Bloc 5', "Bloc 6\u{180E}", 'C'], $result->blocks);
+        // White space is Python's: U+00A0 and U+001F are, U+200B and U+180E are not. A '#' before a no-break space is
+        // not a closing run.
+        $this->assertSame(['Bloc 2', 'Bloc 3 #', "Bloc 4\u{200B}", 'Bloc 5', "Bloc 6\u{180E}"], $result->blocks);
+    }
+
+    /**
+     * Block headings and the text they give once a closing run of hashes is removed.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function closing_hashes_provider(): array {
+        return [
+            'closing run after a space' => ['## Bloc 1 ##', 'Bloc 1'],
+            'closing run after a tab, spaces after it' => ["## Bloc 1\t###   ", 'Bloc 1'],
+            'hash with no space before it' => ['## C#', 'C#'],
+            'two hashes with no space before them' => ['## C##', 'C##'],
+            'only the last run' => ['## a # #', 'a #'],
+            'nothing but hashes' => ['## ##', ''],
+        ];
+    }
+
+    /**
+     * A trailing run of # is removed from a heading only when a space comes before it.
+     *
+     * @group REQ-PLN-001
+     * @dataProvider closing_hashes_provider
+     * @param string $heading The ## heading line.
+     * @param string $block Expected block text.
+     */
+    public function test_closing_hashes_are_removed_only_after_a_space(string $heading, string $block): void {
+        $result = self::parse(self::md('# MP01 · Hashes', $heading));
+
+        $this->assertSame([$block], $result->blocks);
+    }
+
+    /**
+     * The rule for closing hashes applies to module and day headings too.
+     *
+     * @group REQ-PLN-001
+     */
+    public function test_closing_hashes_in_module_and_day_headings(): void {
+        $result = self::parse(self::md('# Programació en C#', '## Bloc 1 ##', '### 2026-10-05 [2h] Punters ##', '- A day'));
+
+        $this->assertSame('Programació en C#', $result->module->title);
+        $this->assertNull($result->module->code);
+        $this->assertSame('Punters', $result->days[0]->title);
+        $this->assertSame([], self::issues($result));
     }
 
     /**
@@ -202,6 +247,7 @@ final class plan_parser_test extends \basic_testcase {
             'spanish weekday with an accent' => ['mié 16/09/2026 [2h]', '2026-09-16', ''],
             'upper case with an accent' => ['MIÉ 16/09/2026 [2h]', '2026-09-16', ''],
             'saturday with an accent' => ['Sáb 19/09/2026 [2h]', '2026-09-19', ''],
+            'mixed letter case' => ['sÁB 19/09/2026 [2h]', '2026-09-19', ''],
             'weekday with a dot' => ['DL. 14/09/2026 [2h]', '2026-09-14', ''],
             'no-break space after the weekday' => ["dc\u{00A0}23/09/2026 [2h]", '2026-09-23', ''],
             'title without hours' => ['dg 20/09/2026 Sunday session', '2026-09-20', 'Sunday session'],
@@ -247,18 +293,22 @@ final class plan_parser_test extends \basic_testcase {
             'empty heading' => [''],
             'weekday glued to the date' => ['dl14/09/2026 [2h]'],
             'full weekday name' => ['Monday 14/09/2026 [2h]'],
-            // The reference reads this one (but not the same digits in ISO form); see tools/compare_parsers.py.
+            'a word that is not a weekday' => ['Setmana 16/10/2026 [2h]'],
             'arabic-indic digits' => ['١٤/٠٩/٢٠٢٦ [2h]'],
-            // The reference fails with a KeyError on these; see tools/compare_parsers.py.
+            'full-width digits' => ['２０２６-１０-０５ [2h]'],
             'long s in a weekday' => ['ſat 10/10/2026 [2h]'],
             'dotless i in a weekday' => ['frı 09/10/2026 [2h]'],
+            'dotted capital I in a weekday' => ['FRİ 09/10/2026 [2h]'],
+            'cyrillic o in a weekday' => ["M\u{043E}n 14/09/2026 [2h]"],
         ];
     }
 
     /**
-     * A day heading without a readable, existing date is an error and gives no day.
+     * A day heading without a readable, existing date, or with a word before it that is not a weekday, is an error and
+     * gives no day.
      *
      * @group REQ-PLN-005
+     * @group REQ-PLN-015
      * @dataProvider unreadable_date_provider
      * @param string $heading Text of the ### heading.
      */
@@ -366,6 +416,20 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
+     * Hours written with digits other than 0 to 9 are not hours but part of the title.
+     *
+     * @group REQ-PLN-006
+     * @group REQ-PLN-015
+     */
+    public function test_hours_need_digits_0_to_9(): void {
+        $result = self::parse(self::md('# MP01 · Hours', '## RA1', '### 2026-10-05 [٢h]', '- A Monday'));
+
+        $this->assertSame(2.0, $result->days[0]->hours);
+        $this->assertSame('[٢h]', $result->days[0]->title);
+        $this->assertSame([], self::issues($result));
+    }
+
+    /**
      * Everything under a ### until the next heading of level 1 to 3 is the day's plan, kept as Markdown.
      *
      * @group REQ-PLN-007
@@ -402,6 +466,7 @@ final class plan_parser_test extends \basic_testcase {
      * Windows and old Mac line endings give the same lines, and the body is joined with "\n".
      *
      * @group REQ-PLN-007
+     * @group REQ-PLN-015
      */
     public function test_line_endings(): void {
         $windows = self::parse("# MP01 · Line endings\r\n## RA1\r\n### 2026-10-05 [2h]\r\n- one\r\n- two\r\n");
@@ -416,17 +481,19 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
-     * Lines break where Python's str.splitlines() breaks them: also at VT, FF, FS, GS, RS, NEL, LS and PS.
+     * Only LF, CRLF and CR end lines; VT, FF, FS, NEL, LS and PS are characters of the line (and white space at its ends).
      *
      * @group REQ-PLN-007
+     * @group REQ-PLN-015
      */
-    public function test_line_breaks_of_the_reference(): void {
-        $result = self::parse("# MP01 · Line breaks\u{85}## RA1\u{2028}### 2026-10-05 [2h]\u{2029}"
-            . "- a\x0B- b\x0C- c\x1C- d\x1D- e\x1E");
+    public function test_only_lf_crlf_and_cr_end_lines(): void {
+        $result = self::parse("# MP01 · Line breaks\n## RA1\n### 2026-10-05 [2h]\n- a\x0B- b\u{2028}- c\x1C- d\x0C\u{85}\n"
+            . "### 2026-10-09 [2h]\u{2029}\n- e");
 
         $this->assertSame(['RA1'], $result->blocks);
-        $this->assertSame(3, $result->days[0]->line);
-        $this->assertSame("- a\n- b\n- c\n- d\n- e", $result->days[0]->content);
+        $this->assertSame([3, 5], array_map(fn(plan_day $day): int => $day->line, $result->days));
+        $this->assertSame("- a\x0B- b\u{2028}- c\x1C- d", $result->days[0]->content);
+        $this->assertSame('', $result->days[1]->title);
         $this->assertSame([], self::issues($result));
     }
 
@@ -448,7 +515,7 @@ final class plan_parser_test extends \basic_testcase {
             '~~~',
             '  ' . self::BACKTICKS,
             '### 2026-12-28 [2h]',
-            "\t" . self::BACKTICKS,
+            '   ' . self::BACKTICKS . '  ',
             '#### Level 4',
             '##### Level 5',
             '###### Level 6',
@@ -462,6 +529,89 @@ final class plan_parser_test extends \basic_testcase {
         $this->assertSame(['RA1'], $result->blocks);
         $this->assertSame('MP99', $result->module->code);
         $this->assertSame([], self::issues($result));
+    }
+
+    /**
+     * Lines that open no fence: backticks in a backtick fence's info text, four spaces or a tab before the fence.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function not_a_fence_provider(): array {
+        return [
+            'inline code' => [self::BACKTICKS . 'ls' . self::BACKTICKS . ' on one line'],
+            'a backtick in the info text' => [self::BACKTICKS . "sql \x60x\x60"],
+            'two backticks' => ["\x60\x60"],
+            'four spaces before it' => ['    ' . self::BACKTICKS],
+            'a tab before it' => ["\t" . self::BACKTICKS],
+            'two tildes' => ['~~'],
+        ];
+    }
+
+    /**
+     * A line that opens no fence leaves the next heading as structure.
+     *
+     * @group REQ-PLN-008
+     * @dataProvider not_a_fence_provider
+     * @param string $line The line that looks like a fence.
+     */
+    public function test_line_that_opens_no_fence(string $line): void {
+        $result = self::parse(self::md('# MP01 · Fences', '## RA1', '### 2026-10-05 [2h]', $line, '### 2026-10-09 [2h]', '- b'));
+
+        $this->assertCount(2, $result->days);
+        $this->assertSame(ltrim($line, " \t"), $result->days[0]->content);
+        $this->assertSame([], self::issues($result));
+    }
+
+    /**
+     * A fence closes only with a line of its own character, at least as long, followed by nothing but spaces.
+     *
+     * @group REQ-PLN-008
+     */
+    public function test_fence_closes_only_with_its_own_character_at_least_as_long(): void {
+        $fourticks = self::BACKTICKS . "\x60";
+        $lines = [
+            $fourticks,
+            '### inside',
+            self::BACKTICKS,
+            '~~~~',
+            $fourticks . ' x',
+            '    ' . $fourticks,
+            '   ' . $fourticks . "\x60 \t",
+        ];
+        $tildes = ["~~~ info with \x60backticks\x60", '### inside', self::BACKTICKS . "\x60\x60", '~~~~'];
+        $result = self::parse(self::md('# MP01 · Fences', '## RA1', '### 2026-10-05 [2h]', ...$lines, ...[
+            '### 2026-10-09 [2h]',
+            ...$tildes,
+            '### 2026-10-16 [2h]',
+            '- c',
+        ]));
+
+        $this->assertSame(['2026-10-05', '2026-10-09', '2026-10-16'], array_map(fn(plan_day $day): string => $day->date,
+            $result->days));
+        $this->assertSame(rtrim(implode("\n", $lines)), $result->days[0]->content);
+        $this->assertSame(implode("\n", $tildes), $result->days[1]->content);
+        $this->assertSame([], self::issues($result));
+    }
+
+    /**
+     * A fence still open at the end of the text gives a warning at the line that opened it.
+     *
+     * @group REQ-PLN-008
+     */
+    public function test_unclosed_fence_warns_at_its_opening_line(): void {
+        $result = self::parse(self::md(
+            '# MP01 · A fence that is never closed',
+            '## RA1',
+            '### 2026-10-05 [2h]',
+            self::BACKTICKS . 'sql',
+            'SELECT 1;',
+            '### 2026-10-09 [2h]',
+            '- Swallowed by the open fence',
+        ));
+
+        $this->assertCount(1, $result->days);
+        $this->assertSame(['warning unclosed_fence 4'], self::issues($result));
+        $this->assertSame([], $result->issues[0]->params);
     }
 
     /**
@@ -667,7 +817,8 @@ final class plan_parser_test extends \basic_testcase {
             '### 2026-02-30',
             '# MP02 · Second module',
             '### 2026-10-09 [2h]',
-            '- Friday',
+            self::BACKTICKS,
+            '### 2026-10-12 [2h]',
         ), null, [0 => 2.0]);
 
         $this->assertSame([
@@ -680,6 +831,7 @@ final class plan_parser_test extends \basic_testcase {
             'error multiple_modules 4',
             'warning no_class_weekday 5',
             'warning no_block 5',
+            'warning unclosed_fence 6',
         ], self::issues($result));
     }
 
@@ -703,13 +855,15 @@ final class plan_parser_test extends \basic_testcase {
     }
 
     /**
-     * Long runs of spaces, which make backtracking regular expressions fail, are read like short ones.
+     * Long runs of spaces, which make backtracking regular expressions fail, are read like short ones, and quickly.
      *
      * @group REQ-PLN-001
      * @group REQ-PLN-004
+     * @group REQ-PLN-016
      */
     public function test_long_runs_of_spaces(): void {
         $spaces = str_repeat(' ', 200000);
+        $started = hrtime(true);
         $result = self::parse(self::md(
             '# MP01' . $spaces . '· Module',
             '## RA1' . $spaces . '#',
@@ -725,14 +879,87 @@ final class plan_parser_test extends \basic_testcase {
 
         $digits = str_repeat('1', 200000);
         $this->assertNull(self::parse('# ' . $digits . '! Not a code')->module->code);
+        $this->assertLessThan(1.0, (hrtime(true) - $started) / 1e9);
     }
 
     /**
-     * The text must be UTF-8.
+     * Lines of thousands of hashes, backticks, tildes, digits, letters or spaces, about 2 MB in all, take well under a
+     * second.
+     *
+     * @group REQ-PLN-016
      */
-    public function test_text_must_be_utf8(): void {
-        $this->expectException(\InvalidArgumentException::class);
-        self::parse("# MP01 \xC3\x28 Not UTF-8");
+    public function test_hostile_text_is_read_in_linear_time(): void {
+        $n = 100000;
+        $lines = [
+            '# ' . str_repeat('1', $n) . '! ' . str_repeat(' ', $n) . 'x',
+            '## ' . str_repeat('#', $n) . 'x' . str_repeat(' #', $n),
+            '### dl' . str_repeat(' ', $n) . 'x',
+            '### ' . str_repeat('a', $n) . ' 2026-10-05',
+            '### 2026-10-05 [' . str_repeat('1', $n) . str_repeat(' ', $n) . 'x',
+            str_repeat(self::BACKTICKS, intdiv($n, 3)) . 'x',
+            '~~~',
+            str_repeat('~', $n) . 'x',
+            '- ' . str_repeat(" \u{A0}", $n) . 'x',
+            str_repeat('~', $n),
+        ];
+        $started = hrtime(true);
+        $result = self::parse(self::md(...$lines));
+
+        $this->assertLessThan(1.0, (hrtime(true) - $started) / 1e9);
+        $this->assertSame(['error bad_date 3', 'error bad_date 4', 'warning unclosed_fence 6'], self::issues($result));
+        $this->assertNull($result->module->code);
+        $this->assertCount(1, $result->days);
+        $this->assertStringEndsWith('x # # #', $result->blocks[0]);
+    }
+
+    /**
+     * The hostile-input fixture gives its recorded results in well under a second.
+     *
+     * @group REQ-PLN-016
+     */
+    public function test_long_lines_fixture_is_read_quickly(): void {
+        $text = file_get_contents(__DIR__ . '/../fixtures/cases/long-lines.md');
+        $started = hrtime(true);
+        $summary = self::parse($text)->summary();
+
+        $this->assertLessThan(1.0, (hrtime(true) - $started) / 1e9);
+        $this->assertSame(['multiple_modules'], $summary['errors']);
+        $this->assertSame(1, $summary['days']);
+        $this->assertSame(1, $summary['blocks']);
+    }
+
+    /**
+     * Texts that are not UTF-8 at some line.
+     *
+     * @return array<string, array{0: string, 1: int}>
+     */
+    public static function not_utf8_provider(): array {
+        return [
+            'latin-1 letter' => ["# MP01 · Plan\n## RA1\n### 2026-10-05 [2h]\n- caf\xE9\n", 4],
+            'invalid sequence on line 1' => ["# MP01 \xC3\x28 Not UTF-8\n", 1],
+            'truncated sequence at the end' => ["# MP01 · Plan\r\n\r\n### 2026-10-05\xC3", 3],
+            'encoded surrogate' => ["# MP01\r## \xED\xA0\x80", 2],
+            'overlong slash' => ["# MP01\n\n\n\xC0\xAF", 4],
+        ];
+    }
+
+    /**
+     * A text that is not UTF-8 is refused as a whole: one error at the first bad line, nothing read.
+     *
+     * @group REQ-PLN-015
+     * @dataProvider not_utf8_provider
+     * @param string $text The bytes of the plan.
+     * @param int $line The first line that is not UTF-8.
+     */
+    public function test_text_that_is_not_utf8_is_refused(string $text, int $line): void {
+        $result = self::parse($text);
+
+        $this->assertNull($result->module);
+        $this->assertSame([], $result->blocks);
+        $this->assertSame([], $result->days);
+        $this->assertSame(["error not_utf8 $line"], self::issues($result));
+        $this->assertSame(['not_utf8'], $result->summary()['errors']);
+        $this->assertSame([], $result->summary()['warnings']);
     }
 
     /**
@@ -803,6 +1030,8 @@ final class plan_parser_test extends \basic_testcase {
      * @group REQ-PLN-011
      * @group REQ-PLN-012
      * @group REQ-PLN-013
+     * @group REQ-PLN-015
+     * @group REQ-PLN-016
      * @dataProvider edge_case_provider
      * @param string $file Case file, relative to tests/fixtures.
      * @param array<int, float>|null $timetable Weekday to hours, or null for none.
