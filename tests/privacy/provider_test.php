@@ -1,0 +1,439 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+namespace local_classprogress\privacy;
+
+use core_privacy\local\metadata\collection;
+use core_privacy\local\request\approved_contextlist;
+use core_privacy\local\request\approved_userlist;
+use core_privacy\local\request\userlist;
+use core_privacy\local\request\writer;
+
+/**
+ * Tests for the privacy provider: metadata, export and the three ways of deleting a teacher's data.
+ *
+ * Every test sets up two teachers who each own a school year with a holiday and an evaluation, and a plan with a
+ * slot, items, entries, history (including the history of a deleted entry and a change made by an admin logged in as
+ * the teacher) and an import, so each test also checks that the other teacher's data is left alone.
+ *
+ * @package    local_classprogress
+ * @copyright  2026 Jordi Vidal
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \local_classprogress\privacy\provider
+ * @covers     \local_classprogress\local\data_eraser
+ */
+final class provider_test extends \core_privacy\tests\provider_testcase {
+    /** @var string The plugin's component name. */
+    private const COMPONENT = 'local_classprogress';
+
+    /**
+     * Creates a full set of rows owned by one teacher.
+     *
+     * @param \stdClass $user The owner.
+     * @param string $name Short name used in the free text, so each owner's text can be told apart.
+     * @return array Table name without prefix => ids of the rows created in that table, plus 'gone' => the id of the
+     *     deleted entry whose history is kept.
+     */
+    private function create_teacher_data(\stdClass $user, string $name): array {
+        global $DB;
+
+        $gen = $this->getDataGenerator()->get_plugin_generator(self::COMPONENT);
+        $admin = get_admin();
+
+        $year = $gen->create_schoolyear(['userid' => $user->id, 'name' => "Year of {$name}"]);
+        $holiday = $gen->create_holiday(['schoolyearid' => $year->id, 'startdate' => '2026-12-23',
+            'enddate' => '2027-01-06', 'label' => "Christmas of {$name}"]);
+        $evaluation = $gen->create_evaluation(['schoolyearid' => $year->id, 'name' => "First term of {$name}"]);
+        $plan = $gen->create_plan(['schoolyearid' => $year->id, 'modulecode' => 'MP 0372',
+            'moduletitle' => "Databases of {$name}", 'sourcetext' => "# MP 0372 · Databases of {$name}\n"]);
+        $slot = $gen->create_slot(['planid' => $plan->id, 'weekday' => 0, 'hours' => 2]);
+        $item1 = $gen->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-14',
+            'content' => "Planned day 1 of {$name}"]);
+        $item2 = $gen->create_planitem(['planid' => $plan->id, 'sessiondate' => '2026-09-18',
+            'content' => "Planned day 2 of {$name}"]);
+        $entry = $gen->create_entry(['planitemid' => $item1->id, 'content' => "Done by {$name}, Anna was absent",
+            'carry' => 1]);
+        $unplanned = $gen->create_entry(['planid' => $plan->id, 'sessiondate' => '2026-09-21',
+            'content' => "Extra session of {$name}"]);
+        $gone = $gen->create_entry(['planitemid' => $item2->id, 'content' => "Deleted entry of {$name}"]);
+        $hist = [
+            $gen->create_entry_hist(['entryid' => $entry->id]),
+            $gen->create_entry_hist(['entryid' => $entry->id, 'action' => 'update', 'realuserid' => $admin->id]),
+            $gen->create_entry_hist(['entryid' => $unplanned->id]),
+            $gen->create_entry_hist(['entryid' => $gone->id]),
+            $gen->create_entry_hist(['entryid' => $gone->id, 'action' => 'delete']),
+        ];
+        $DB->delete_records('local_classprogress_entry', ['id' => $gone->id]);
+        $import = $gen->create_import(['planid' => $plan->id, 'daycount' => 2]);
+
+        return [
+            'schoolyear' => [$year->id],
+            'holiday' => [$holiday->id],
+            'evaluation' => [$evaluation->id],
+            'plan' => [$plan->id],
+            'slot' => [$slot->id],
+            'planitem' => [$item1->id, $item2->id],
+            'entry' => [$entry->id, $unplanned->id],
+            'entry_hist' => array_column($hist, 'id'),
+            'import' => [$import->id],
+            'gone' => $gone->id,
+        ];
+    }
+
+    /**
+     * Counts how many of the given rows still exist.
+     *
+     * @param array $ids Rows as returned by create_teacher_data().
+     * @return int[] Table name => rows left.
+     */
+    private static function rows_left(array $ids): array {
+        global $DB;
+
+        unset($ids['gone']);
+        $left = [];
+        foreach ($ids as $table => $tableids) {
+            [$insql, $params] = $DB->get_in_or_equal($tableids);
+            $left[$table] = $DB->count_records_select('local_classprogress_' . $table, "id {$insql}", $params);
+        }
+        return $left;
+    }
+
+    /**
+     * Asserts that none of the given rows exist any more.
+     *
+     * @param array $ids Rows as returned by create_teacher_data().
+     */
+    private function assert_all_deleted(array $ids): void {
+        $left = self::rows_left($ids);
+        $this->assertSame(array_fill_keys(array_keys($left), 0), $left);
+    }
+
+    /**
+     * Asserts that all of the given rows still exist.
+     *
+     * @param array $ids Rows as returned by create_teacher_data().
+     */
+    private function assert_all_kept(array $ids): void {
+        unset($ids['gone']);
+        $this->assertSame(array_map('count', $ids), self::rows_left($ids));
+    }
+
+    /**
+     * Lists the users the provider finds in a context.
+     *
+     * @param \context $context The context to look in.
+     * @return int[] User ids.
+     */
+    private static function users_in(\context $context): array {
+        $userlist = new userlist($context, self::COMPONENT);
+        provider::get_users_in_context($userlist);
+        return $userlist->get_userids();
+    }
+
+    /**
+     * Every table and every field of db/install.xml, except the id, is described with an existing string.
+     *
+     * @group REQ-PRV-001
+     */
+    public function test_metadata_describes_every_table_and_field(): void {
+        global $DB;
+
+        $DB->get_manager(); // Loads the XMLDB classes.
+        $file = new \xmldb_file(\core_component::get_component_directory(self::COMPONENT) . '/db/install.xml');
+        $this->assertTrue($file->loadXMLStructure());
+        $expected = [];
+        foreach ($file->getStructure()->getTables() as $table) {
+            $fields = array_map(fn(\xmldb_field $field): string => $field->getName(), $table->getFields());
+            $expected[$table->getName()] = array_values(array_diff($fields, ['id']));
+            sort($expected[$table->getName()]);
+        }
+
+        $described = [];
+        foreach (provider::get_metadata(new collection(self::COMPONENT))->get_collection() as $item) {
+            $this->assertInstanceOf(\core_privacy\local\metadata\types\database_table::class, $item);
+            $this->assertTrue(get_string_manager()->string_exists($item->get_summary(), self::COMPONENT), $item->get_name());
+            foreach ($item->get_privacy_fields() as $field => $stringid) {
+                $this->assertSame("privacy:metadata:{$item->get_name()}:{$field}", $stringid);
+                $this->assertTrue(get_string_manager()->string_exists($stringid, self::COMPONENT), $stringid);
+            }
+            $fields = array_keys($item->get_privacy_fields());
+            sort($fields);
+            $described[$item->get_name()] = $fields;
+        }
+        ksort($expected);
+        ksort($described);
+
+        $this->assertCount(9, $expected);
+        $this->assertSame($expected, $described);
+    }
+
+    /**
+     * The metadata warns that entry text and history may name students.
+     *
+     * @group REQ-PRV-001
+     */
+    public function test_metadata_warns_that_free_text_may_name_students(): void {
+        foreach (['local_classprogress_entry', 'local_classprogress_entry_hist'] as $table) {
+            $this->assertStringContainsString('students', get_string('privacy:metadata:' . $table, self::COMPONENT));
+        }
+    }
+
+    /**
+     * A teacher's data lives in their own user context, and only there; users without data have none.
+     *
+     * @group REQ-PRV-002
+     */
+    public function test_get_contexts_for_userid(): void {
+        $this->resetAfterTest();
+        $gen = $this->getDataGenerator()->get_plugin_generator(self::COMPONENT);
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $yearonly = $this->getDataGenerator()->create_user();
+        $nobody = $this->getDataGenerator()->create_user();
+        $this->create_teacher_data($teacher1, 'T1');
+        $this->create_teacher_data($teacher2, 'T2');
+        $gen->create_schoolyear(['userid' => $yearonly->id]);
+
+        $this->assertSame([\context_user::instance($teacher1->id)->id],
+            provider::get_contexts_for_userid($teacher1->id)->get_contextids());
+        $this->assertSame([\context_user::instance($yearonly->id)->id],
+            provider::get_contexts_for_userid($yearonly->id)->get_contextids());
+        $this->assertSame([], provider::get_contexts_for_userid($nobody->id)->get_contextids());
+        // The admin who changed an entry while logged in as a teacher owns nothing here.
+        $this->assertSame([], provider::get_contexts_for_userid(get_admin()->id)->get_contextids());
+    }
+
+    /**
+     * The only user found in a teacher's user context is that teacher; other kinds of context hold nobody.
+     *
+     * @group REQ-PRV-002
+     */
+    public function test_get_users_in_context(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $nobody = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $this->create_teacher_data($teacher1, 'T1');
+        $this->create_teacher_data($teacher2, 'T2');
+
+        $this->assertSame([(int) $teacher1->id], self::users_in(\context_user::instance($teacher1->id)));
+        $this->assertSame([(int) $teacher2->id], self::users_in(\context_user::instance($teacher2->id)));
+        $this->assertSame([], self::users_in(\context_user::instance($nobody->id)));
+        $this->assertSame([], self::users_in(\context_user::instance(get_admin()->id)));
+        $this->assertSame([], self::users_in(\context_system::instance()));
+        $this->assertSame([], self::users_in(\context_course::instance($course->id)));
+    }
+
+    /**
+     * The export holds the teacher's school year with holidays and evaluations, and the plan with its source text,
+     * timetable, items, entries, imports and the whole history, including that of a deleted entry.
+     *
+     * @group REQ-PRV-002
+     */
+    public function test_export_user_data(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $ids = $this->create_teacher_data($teacher1, 'T1');
+        $other = $this->create_teacher_data($teacher2, 'T2');
+        $context = \context_user::instance($teacher1->id);
+        $root = get_string('pluginname', self::COMPONENT);
+        $yearpath = [$root, get_string('privacy:path:schoolyear', self::COMPONENT, $ids['schoolyear'][0])];
+        $planpath = [$root, get_string('privacy:path:plan', self::COMPONENT, $ids['plan'][0])];
+
+        $writer = writer::with_context($context);
+        $this->assertFalse($writer->has_any_data());
+        $this->export_context_data_for_user($teacher1->id, $context, self::COMPONENT);
+        $this->assertTrue($writer->has_any_data());
+
+        $year = $writer->get_data($yearpath);
+        $this->assertSame('Year of T1', $year->name);
+        $this->assertSame('2026-09-14', $year->startdate);
+        $this->assertSame('2027-06-21', $year->enddate);
+        $this->assertCount(1, $year->holidays);
+        $this->assertSame('Christmas of T1', $year->holidays[0]->label);
+        $this->assertSame('2026-12-23', $year->holidays[0]->startdate);
+        $this->assertSame('2027-01-06', $year->holidays[0]->enddate);
+        $this->assertCount(1, $year->evaluations);
+        $this->assertSame('First term of T1', $year->evaluations[0]->name);
+
+        $plan = $writer->get_data($planpath);
+        $this->assertSame('Year of T1', $plan->schoolyear);
+        $this->assertSame('MP 0372', $plan->modulecode);
+        $this->assertSame('Databases of T1', $plan->moduletitle);
+        $this->assertSame('draft', $plan->status);
+        $this->assertSame("# MP 0372 · Databases of T1\n", $plan->sourcetext);
+        $this->assertCount(1, $plan->slots);
+        $this->assertSame(get_string('monday', 'calendar'), $plan->slots[0]->weekday);
+        $this->assertEquals(2, $plan->slots[0]->hours);
+        $this->assertCount(1, $plan->imports);
+        $this->assertSame(2, (int) $plan->imports[0]->daycount);
+
+        $this->assertCount(2, $plan->items);
+        $this->assertSame('Planned day 1 of T1', $plan->items[0]->content);
+        $this->assertSame('Done by T1, Anna was absent', $plan->items[0]->entry->content);
+        $this->assertSame(get_string('yes'), $plan->items[0]->entry->carry);
+        $this->assertSame('Planned day 2 of T1', $plan->items[1]->content);
+        $this->assertNull($plan->items[1]->entry);
+        $this->assertCount(1, $plan->unplannedentries);
+        $this->assertSame('Extra session of T1', $plan->unplannedentries[0]->content);
+
+        $this->assertCount(5, $plan->history);
+        $actions = array_map(fn($row) => [$row->entryid, $row->action], $plan->history);
+        $this->assertContains([$ids['gone'], 'delete'], $actions);
+        $loggedinas = array_values(array_filter($plan->history, fn($row) => $row->realuserid !== null));
+        $this->assertCount(1, $loggedinas);
+        $this->assertSame((int) get_admin()->id, $loggedinas[0]->realuserid);
+        $this->assertSame((int) $teacher1->id, $loggedinas[0]->userid);
+        $this->assertSame('Done by T1, Anna was absent', $loggedinas[0]->snapshot->content);
+
+        // Nothing of the other teacher is exported, here or in their own context.
+        $this->assertSame([], $writer->get_data([$root, get_string('privacy:path:plan', self::COMPONENT, $other['plan'][0])]));
+        $this->assertFalse(writer::with_context(\context_user::instance($teacher2->id))->has_any_data());
+    }
+
+    /**
+     * Exporting in a context the user does not own, or in a context of another kind, writes nothing.
+     *
+     * @group REQ-PRV-002
+     */
+    public function test_export_ignores_other_contexts(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $this->create_teacher_data($teacher1, 'T1');
+        $this->create_teacher_data($teacher2, 'T2');
+        $context2 = \context_user::instance($teacher2->id);
+
+        $this->export_context_data_for_user($teacher1->id, $context2, self::COMPONENT);
+        $this->export_context_data_for_user($teacher1->id, \context_system::instance(), self::COMPONENT);
+
+        $this->assertFalse(writer::with_context($context2)->has_any_data());
+        $this->assertFalse(writer::with_context(\context_system::instance())->has_any_data());
+    }
+
+    /**
+     * Deleting all data in a teacher's user context removes every row of that teacher and nothing else; other kinds
+     * of context delete nothing.
+     *
+     * @group REQ-PRV-003
+     */
+    public function test_delete_data_for_all_users_in_context(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $ids1 = $this->create_teacher_data($teacher1, 'T1');
+        $ids2 = $this->create_teacher_data($teacher2, 'T2');
+
+        provider::delete_data_for_all_users_in_context(\context_system::instance());
+        provider::delete_data_for_all_users_in_context(\context_course::instance($course->id));
+        $this->assert_all_kept($ids1);
+
+        provider::delete_data_for_all_users_in_context(\context_user::instance($teacher1->id));
+
+        $this->assert_all_deleted($ids1);
+        $this->assert_all_kept($ids2);
+    }
+
+    /**
+     * Deleting a user's data in their approved contexts removes all their rows, history included, and only theirs.
+     *
+     * @group REQ-PRV-003
+     */
+    public function test_delete_data_for_user(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $ids1 = $this->create_teacher_data($teacher1, 'T1');
+        $ids2 = $this->create_teacher_data($teacher2, 'T2');
+
+        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT,
+            [\context_user::instance($teacher1->id)->id]));
+
+        $this->assert_all_deleted($ids1);
+        $this->assert_all_kept($ids2);
+    }
+
+    /**
+     * A context list that does not hold the user's own context deletes nothing, even if it holds another teacher's.
+     *
+     * @group REQ-PRV-003
+     */
+    public function test_delete_data_for_user_ignores_other_contexts(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $ids1 = $this->create_teacher_data($teacher1, 'T1');
+        $ids2 = $this->create_teacher_data($teacher2, 'T2');
+
+        provider::delete_data_for_user(new approved_contextlist($teacher1, self::COMPONENT,
+            [\context_user::instance($teacher2->id)->id, \context_system::instance()->id]));
+
+        $this->assert_all_kept($ids1);
+        $this->assert_all_kept($ids2);
+    }
+
+    /**
+     * Deleting a list of users in a teacher's context removes the teacher's rows only when the teacher is in the
+     * list; other contexts delete nothing.
+     *
+     * @group REQ-PRV-003
+     */
+    public function test_delete_data_for_users(): void {
+        $this->resetAfterTest();
+        $teacher1 = $this->getDataGenerator()->create_user();
+        $teacher2 = $this->getDataGenerator()->create_user();
+        $ids1 = $this->create_teacher_data($teacher1, 'T1');
+        $ids2 = $this->create_teacher_data($teacher2, 'T2');
+        $context1 = \context_user::instance($teacher1->id);
+        $both = [$teacher1->id, $teacher2->id];
+
+        provider::delete_data_for_users(new approved_userlist($context1, self::COMPONENT, [$teacher2->id]));
+        provider::delete_data_for_users(new approved_userlist(\context_system::instance(), self::COMPONENT, $both));
+        $this->assert_all_kept($ids1);
+
+        provider::delete_data_for_users(new approved_userlist($context1, self::COMPONENT, $both));
+
+        $this->assert_all_deleted($ids1);
+        $this->assert_all_kept($ids2);
+        $this->assertSame([], self::users_in($context1));
+        $this->assertSame([(int) $teacher2->id], self::users_in(\context_user::instance($teacher2->id)));
+    }
+
+    /**
+     * Erasing the admin who changed an entry while logged in as a teacher keeps the teacher's history as it is.
+     *
+     * @group REQ-PRV-003
+     */
+    public function test_erasing_the_logged_in_as_user_keeps_the_owners_history(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $teacher = $this->getDataGenerator()->create_user();
+        $ids = $this->create_teacher_data($teacher, 'T1');
+        $admin = get_admin();
+        $admincontext = \context_user::instance($admin->id);
+
+        provider::delete_data_for_user(new approved_contextlist($admin, self::COMPONENT, [$admincontext->id]));
+        provider::delete_data_for_users(new approved_userlist($admincontext, self::COMPONENT, [$admin->id]));
+        provider::delete_data_for_all_users_in_context($admincontext);
+
+        $this->assert_all_kept($ids);
+        $this->assertSame(1, $DB->count_records('local_classprogress_entry_hist', ['realuserid' => $admin->id]));
+    }
+}
