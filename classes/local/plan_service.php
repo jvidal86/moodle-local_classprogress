@@ -19,8 +19,9 @@ namespace local_classprogress\local;
 /**
  * A teacher's plans: the draft shell of each plan (module, dates, optional course, weekly timetable) and its calendar.
  *
- * Every method takes the acting user and reaches only that user's rows: a missing id and another user's id give the
- * same exception, error_notfound, and a list of ids is refused as a whole when one of them is not the user's. The
+ * Every method first checks, live, that the acting user may use the plugin (access::qualifies()), and then reaches only
+ * that user's rows: a missing id and another user's id give the same exception, error_notfound, and a list of ids is
+ * refused as a whole when one of them is not the user's. The
  * calendar of a plan uses the holidays of its school year, so they apply to every plan of that year.
  *
  * Plan data, as taken by validate(), create() and update(): schoolyearid; courseid (0 or null for none); modulecode
@@ -49,17 +50,28 @@ final class plan_service {
     /** @var string Timetable slot table. */
     private const SLOT = 'local_classprogress_slot';
 
+    /** @var string[] Tables of the rows that belong to a plan through their planid, deleted with it. */
+    private const CHILDREN = [
+        'local_classprogress_entry_hist',
+        'local_classprogress_entry',
+        'local_classprogress_planitem',
+        'local_classprogress_import',
+        self::SLOT,
+    ];
+
     /**
      * Creates a draft plan with its timetable.
      *
      * @param int $userid The acting user, who owns the new plan.
      * @param \stdClass $data Plan data (see the class description).
      * @return int The new plan id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception With the first error of validate() when the data is not valid.
      */
     public static function create(int $userid, \stdClass $data): int {
         global $DB;
 
+        self::require_access($userid);
         self::require_valid($userid, $data);
         return self::in_transaction(function () use ($DB, $userid, $data): int {
             $now = time();
@@ -82,11 +94,13 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @param \stdClass $data Plan data (see the class description).
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound, or the first error of validate().
      */
     public static function update(int $userid, int $id, \stdClass $data): void {
         global $DB;
 
+        self::require_access($userid);
         self::own($userid, $id);
         self::require_valid($userid, $data);
         self::in_transaction(function () use ($DB, $id, $data): void {
@@ -97,20 +111,22 @@ final class plan_service {
     }
 
     /**
-     * Deletes a plan with its timetable, its items and its import log.
+     * Deletes a plan with every row that hangs from it: timetable, items, import log, entries and their history.
      *
      * @param int $userid The acting user.
      * @param int $id Plan id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function delete(int $userid, int $id): void {
         global $DB;
 
+        self::require_access($userid);
         self::own($userid, $id);
         self::in_transaction(function () use ($DB, $id): void {
-            $DB->delete_records(self::SLOT, ['planid' => $id]);
-            $DB->delete_records('local_classprogress_planitem', ['planid' => $id]);
-            $DB->delete_records('local_classprogress_import', ['planid' => $id]);
+            foreach (self::CHILDREN as $table) {
+                $DB->delete_records($table, ['planid' => $id]);
+            }
             $DB->delete_records(self::PLAN, ['id' => $id]);
         });
     }
@@ -121,9 +137,11 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @return \stdClass The plan row.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function get(int $userid, int $id): \stdClass {
+        self::require_access($userid);
         return self::own($userid, $id);
     }
 
@@ -132,10 +150,12 @@ final class plan_service {
      *
      * @param int $userid The acting user.
      * @return \stdClass[] Plan rows, keyed by id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      */
     public static function list(int $userid): array {
         global $DB;
 
+        self::require_access($userid);
         return $DB->get_records(self::PLAN, ['userid' => $userid], 'modulecode, moduletitle, id');
     }
 
@@ -145,9 +165,11 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @return float[] Weekday => hours, Monday = 0 to Sunday = 6, only weekdays with class, in weekday order.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function timetable(int $userid, int $id): array {
+        self::require_access($userid);
         self::own($userid, $id);
         return self::timetables([$id])[$id];
     }
@@ -158,6 +180,7 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param int $id Plan id.
      * @return calendar_result The calendar; its lost sessions are keyed by holiday id, as schoolyear_service::holidays().
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function calendar(int $userid, int $id): calendar_result {
@@ -170,11 +193,13 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param int[] $ids Plan ids; repeated ids count once.
      * @return calendar_result[] Plan id => calendar, in the order of the ids.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound when any of the ids is missing or another user's.
      */
     public static function calendars(int $userid, array $ids): array {
         global $DB;
 
+        self::require_access($userid);
         $ids = array_values(array_unique(array_map('intval', $ids)));
         if (!$ids) {
             return [];
@@ -201,8 +226,10 @@ final class plan_service {
      *
      * @param int $userid The acting user.
      * @return \stdClass[] Course rows with id and fullname, keyed by id, by full name.
+     * @throws \required_capability_exception When the user may not use the plugin.
      */
     public static function linkable_courses(int $userid): array {
+        self::require_access($userid);
         $courses = get_user_capability_course(access::CAPABILITY, $userid, true, 'fullname', 'fullname') ?: [];
         $linkable = [];
         foreach ($courses as $course) {
@@ -222,8 +249,21 @@ final class plan_service {
      * @param int $userid The acting user.
      * @param \stdClass $data Plan data (see the class description).
      * @return string[] Field => lang string id of the error, in field order; empty when the data is valid.
+     * @throws \required_capability_exception When the user may not use the plugin.
      */
     public static function validate(int $userid, \stdClass $data): array {
+        self::require_access($userid);
+        return self::errors($userid, $data);
+    }
+
+    /**
+     * Checks plan data for a user already known to qualify; see validate().
+     *
+     * @param int $userid The acting user.
+     * @param \stdClass $data Plan data.
+     * @return string[] Field => lang string id of the error.
+     */
+    private static function errors(int $userid, \stdClass $data): array {
         global $DB;
 
         $errors = [];
@@ -270,9 +310,21 @@ final class plan_service {
      * @throws \moodle_exception With the lang string id of the first error.
      */
     private static function require_valid(int $userid, \stdClass $data): void {
-        $errors = self::validate($userid, $data);
+        $errors = self::errors($userid, $data);
         if ($errors) {
             throw new \moodle_exception(reset($errors), 'local_classprogress');
+        }
+    }
+
+    /**
+     * Refuses a user who may not use the plugin, checked live.
+     *
+     * @param int $userid The acting user.
+     * @throws \required_capability_exception When the user does not qualify.
+     */
+    private static function require_access(int $userid): void {
+        if (!access::qualifies($userid)) {
+            throw new \required_capability_exception(\context_system::instance(), access::CAPABILITY, 'nopermissions', '');
         }
     }
 

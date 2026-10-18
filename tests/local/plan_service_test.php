@@ -260,29 +260,43 @@ final class plan_service_test extends \advanced_testcase {
     }
 
     /**
-     * Deleting a plan removes it with its timetable, items and import log, and nothing of other plans.
+     * Deleting a plan removes every row that hangs from it (timetable, items, import log, entries and their history,
+     * including the history of an entry already deleted), and nothing of other plans or of the school year.
      */
-    public function test_delete_removes_the_plan_with_its_rows(): void {
+    public function test_delete_removes_the_plan_with_all_its_rows(): void {
         global $DB;
 
         $this->resetAfterTest();
         $user = $this->teacher();
-        $yearid = self::year($user->id);
+        $yearid = self::year($user->id, '2026-10-12 Festa');
         $id = plan_service::create($user->id, self::plandata($yearid));
         $keep = plan_service::create($user->id, self::plandata($yearid));
+        $children = ['slot', 'planitem', 'import', 'entry', 'entry_hist'];
         foreach ([$id, $keep] as $planid) {
-            $this->generator()->create_planitem(['planid' => $planid]);
+            $item = $this->generator()->create_planitem(['planid' => $planid]);
             $this->generator()->create_import(['planid' => $planid]);
+            $planned = $this->generator()->create_entry(['planitemid' => $item->id]);
+            $unplanned = $this->generator()->create_entry(['planid' => $planid]);
+            $this->generator()->create_entry_hist(['entryid' => $planned->id]);
+            $this->generator()->create_entry_hist(['entryid' => $unplanned->id]);
+            $this->generator()->create_entry_hist(['entryid' => $unplanned->id + 1000, 'planid' => $planid, 'action' => 'delete']);
+        }
+        $kept = [];
+        foreach ($children as $table) {
+            $kept[$table] = $DB->get_records('local_classprogress_' . $table, ['planid' => $keep]);
+            $this->assertNotEmpty($DB->get_records('local_classprogress_' . $table, ['planid' => $id]), $table);
         }
 
         plan_service::delete($user->id, $id);
 
         $this->assertFalse($DB->record_exists('local_classprogress_plan', ['id' => $id]));
-        foreach (['slot', 'planitem', 'import'] as $table) {
-            $this->assertSame(0, $DB->count_records('local_classprogress_' . $table, ['planid' => $id]));
-            $this->assertGreaterThan(0, $DB->count_records('local_classprogress_' . $table, ['planid' => $keep]));
+        foreach ($children as $table) {
+            $this->assertSame(0, $DB->count_records('local_classprogress_' . $table, ['planid' => $id]), $table);
+            $this->assertEquals($kept[$table], $DB->get_records('local_classprogress_' . $table, ['planid' => $keep]), $table);
         }
+        $this->assertTrue($DB->record_exists('local_classprogress_plan', ['id' => $keep]));
         $this->assertTrue($DB->record_exists('local_classprogress_schoolyear', ['id' => $yearid]));
+        $this->assertCount(1, schoolyear_service::holidays($user->id, $yearid));
     }
 
     /**
@@ -526,6 +540,10 @@ final class plan_service_test extends \advanced_testcase {
      */
     private static function call(string $operation, int $userid, int $id, int $yearid): void {
         match ($operation) {
+            'create' => plan_service::create($userid, self::plandata($yearid)),
+            'list' => plan_service::list($userid),
+            'linkable_courses' => plan_service::linkable_courses($userid),
+            'validate' => plan_service::validate($userid, self::plandata($yearid)),
             'get' => plan_service::get($userid, $id),
             'update' => plan_service::update($userid, $id, self::plandata($yearid, ['moduletitle' => 'Taken'])),
             'delete' => plan_service::delete($userid, $id),
@@ -536,9 +554,80 @@ final class plan_service_test extends \advanced_testcase {
     }
 
     /**
+     * Users who do not hold the capability in any course: a student, and a user with no role at all.
+     *
+     * @return array Case name => [actor, operation].
+     */
+    public static function no_access_cases(): array {
+        $operations = ['create', 'update', 'delete', 'get', 'list', 'timetable', 'calendar', 'calendars', 'linkable_courses',
+            'validate'];
+        $cases = [];
+        foreach (['student', 'user without a role'] as $actor) {
+            foreach ($operations as $operation) {
+                $cases["{$actor} {$operation}"] = [$actor, $operation];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * Every method checks the capability live, before ownership: without it, even the user's own plan is refused and
+     * nothing is written.
+     *
+     * @dataProvider no_access_cases
+     * @group REQ-ACC-003
+     * @param string $actor Who acts.
+     * @param string $operation What they try.
+     */
+    public function test_every_method_refuses_a_user_without_the_capability(string $actor, string $operation): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        if ($actor === 'student') {
+            $this->getDataGenerator()->enrol_user($user->id, $this->getDataGenerator()->create_course()->id, 'student');
+        }
+        $plan = $this->generator()->create_plan(['userid' => $user->id]);
+        $this->generator()->create_slot(['planid' => $plan->id]);
+        $before = [$DB->get_records('local_classprogress_plan'), $DB->get_records('local_classprogress_slot')];
+
+        try {
+            self::call($operation, $user->id, $plan->id, $plan->schoolyearid);
+            $this->fail('Expected an exception');
+        } catch (\required_capability_exception $e) {
+            $this->assertSame('nopermissions', $e->errorcode);
+        }
+
+        $this->assertEquals($before, [$DB->get_records('local_classprogress_plan'), $DB->get_records('local_classprogress_slot')]);
+    }
+
+    /**
+     * A teacher whose role is removed is refused at the next call, with no wait for a cache or a new login.
+     *
+     * @group REQ-ACC-003
+     */
+    public function test_a_removed_role_is_refused_at_once(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->teacher($course);
+        $this->setUser($user);
+        $id = plan_service::create($user->id, self::plandata(self::year($user->id)));
+        $this->assertNotEmpty(plan_service::calendar($user->id, $id)->sessions);
+        $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        role_unassign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->expectException(\required_capability_exception::class);
+        plan_service::calendar($user->id, $id);
+    }
+
+    /**
      * Another teacher with the same capability, or an administrator, can neither read, change nor delete the plan.
      *
      * @dataProvider foreign_access_cases
+     * @group REQ-ACC-003
      * @group REQ-OWN-001
      * @param string $actor Who acts.
      * @param string $operation What they try.

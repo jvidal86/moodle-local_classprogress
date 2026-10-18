@@ -19,10 +19,11 @@ namespace local_classprogress\local;
 /**
  * A teacher's school years, with their holidays and evaluation periods.
  *
- * Every method takes the acting user and reaches only that user's rows: a missing id and another user's id give the
- * same exception, error_notfound. The holidays of a school year apply to all of its plans. They are stored one row per
- * holiday line, and holiday text with a line that cannot be read is refused as a whole, so no bad line is ever stored
- * and the teacher keeps the text to correct it. Dates are ISO yyyy-mm-dd strings.
+ * Every method that takes the acting user first checks, live, that the user may use the plugin (access::qualifies()),
+ * and then reaches only that user's rows: a missing id and another user's id give the same exception, error_notfound.
+ * The holidays of a school year apply to all of its plans. They are stored one row per holiday line, and holiday text
+ * with a line that cannot be read is refused as a whole, so no bad line is ever stored and the teacher keeps the text
+ * to correct it. A school year that still has plans is not deleted. Dates are ISO yyyy-mm-dd strings.
  *
  * School year data, as taken by validate(), create() and update(): name, startdate, enddate; optionally holidays (the
  * holiday text) and evaluations (a list of objects or arrays with name, startdate and enddate). On update, data without
@@ -63,11 +64,13 @@ final class schoolyear_service {
      * @param int $userid The acting user, who owns the new school year.
      * @param \stdClass $data School year data (see the class description).
      * @return int The new school year id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception With the first error of validate() when the data is not valid.
      */
     public static function create(int $userid, \stdClass $data): int {
         global $DB;
 
+        self::require_access($userid);
         self::require_valid($data);
         return self::in_transaction(function () use ($DB, $userid, $data): int {
             $now = time();
@@ -90,11 +93,13 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @param \stdClass $data School year data (see the class description).
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound, or the first error of validate().
      */
     public static function update(int $userid, int $id, \stdClass $data): void {
         global $DB;
 
+        self::require_access($userid);
         self::own($userid, $id);
         self::require_valid($data);
         self::in_transaction(function () use ($DB, $id, $data): void {
@@ -115,12 +120,15 @@ final class schoolyear_service {
      *
      * @param int $userid The acting user.
      * @param int $id School year id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound, or error_schoolyearhasplans.
      */
     public static function delete(int $userid, int $id): void {
         global $DB;
 
-        if (self::count_plans($userid, $id) > 0) {
+        self::require_access($userid);
+        self::own($userid, $id);
+        if (self::plan_count($userid, $id) > 0) {
             throw new \moodle_exception('error_schoolyearhasplans', 'local_classprogress');
         }
         self::in_transaction(function () use ($DB, $id): void {
@@ -136,9 +144,11 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @return \stdClass The school year row.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function get(int $userid, int $id): \stdClass {
+        self::require_access($userid);
         return self::own($userid, $id);
     }
 
@@ -147,10 +157,12 @@ final class schoolyear_service {
      *
      * @param int $userid The acting user.
      * @return \stdClass[] School year rows, keyed by id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      */
     public static function list(int $userid): array {
         global $DB;
 
+        self::require_access($userid);
         return $DB->get_records(self::YEAR, ['userid' => $userid], 'startdate DESC, id DESC');
     }
 
@@ -160,11 +172,13 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @return holiday_entry[] Holidays keyed by holiday id; each line is its position in holidays_to_text(), from 1.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function holidays(int $userid, int $id): array {
         global $DB;
 
+        self::require_access($userid);
         self::own($userid, $id);
         $entries = [];
         foreach ($DB->get_records(self::HOLIDAY, ['schoolyearid' => $id], 'id') as $row) {
@@ -179,11 +193,13 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @return \stdClass[] Evaluation rows keyed by id.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function evaluations(int $userid, int $id): array {
         global $DB;
 
+        self::require_access($userid);
         self::own($userid, $id);
         return $DB->get_records(self::EVALUATION, ['schoolyearid' => $id], 'startdate, id');
     }
@@ -194,13 +210,13 @@ final class schoolyear_service {
      * @param int $userid The acting user.
      * @param int $id School year id.
      * @return int Number of plans.
+     * @throws \required_capability_exception When the user may not use the plugin.
      * @throws \moodle_exception error_notfound.
      */
     public static function count_plans(int $userid, int $id): int {
-        global $DB;
-
+        self::require_access($userid);
         self::own($userid, $id);
-        return $DB->count_records('local_classprogress_plan', ['schoolyearid' => $id, 'userid' => $userid]);
+        return self::plan_count($userid, $id);
     }
 
     /**
@@ -353,6 +369,31 @@ final class schoolyear_service {
         if ($errors) {
             throw new \moodle_exception(reset($errors), 'local_classprogress');
         }
+    }
+
+    /**
+     * Refuses a user who may not use the plugin, checked live.
+     *
+     * @param int $userid The acting user.
+     * @throws \required_capability_exception When the user does not qualify.
+     */
+    private static function require_access(int $userid): void {
+        if (!access::qualifies($userid)) {
+            throw new \required_capability_exception(\context_system::instance(), access::CAPABILITY, 'nopermissions', '');
+        }
+    }
+
+    /**
+     * Counts the plans of a school year of the user.
+     *
+     * @param int $userid The acting user.
+     * @param int $id School year id, already checked to be the user's.
+     * @return int Number of plans.
+     */
+    private static function plan_count(int $userid, int $id): int {
+        global $DB;
+
+        return $DB->count_records('local_classprogress_plan', ['schoolyearid' => $id, 'userid' => $userid]);
     }
 
     /**

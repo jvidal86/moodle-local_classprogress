@@ -468,6 +468,8 @@ final class schoolyear_service_test extends \advanced_testcase {
      */
     private static function call(string $operation, int $userid, int $id): void {
         match ($operation) {
+            'create' => schoolyear_service::create($userid, self::yeardata()),
+            'list' => schoolyear_service::list($userid),
             'get' => schoolyear_service::get($userid, $id),
             'update' => schoolyear_service::update($userid, $id, self::yeardata(['name' => 'Taken'])),
             'delete' => schoolyear_service::delete($userid, $id),
@@ -478,9 +480,86 @@ final class schoolyear_service_test extends \advanced_testcase {
     }
 
     /**
+     * Users who do not hold the capability in any course: a student, and a user with no role at all.
+     *
+     * @return array Case name => [actor, operation].
+     */
+    public static function no_access_cases(): array {
+        $cases = [];
+        foreach (['student', 'user without a role'] as $actor) {
+            foreach (['create', 'update', 'delete', 'get', 'list', 'holidays', 'evaluations', 'count_plans'] as $operation) {
+                $cases["{$actor} {$operation}"] = [$actor, $operation];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * Every method checks the capability live, before ownership: without it, even the user's own school year is refused
+     * and nothing is written.
+     *
+     * @dataProvider no_access_cases
+     * @group REQ-ACC-003
+     * @param string $actor Who acts.
+     * @param string $operation What they try.
+     */
+    public function test_every_method_refuses_a_user_without_the_capability(string $actor, string $operation): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        if ($actor === 'student') {
+            $this->getDataGenerator()->enrol_user($user->id, $this->getDataGenerator()->create_course()->id, 'student');
+        }
+        $year = $this->generator()->create_schoolyear(['userid' => $user->id]);
+        $this->generator()->create_holiday(['schoolyearid' => $year->id]);
+        $before = [
+            $DB->get_records('local_classprogress_schoolyear'),
+            $DB->get_records('local_classprogress_holiday'),
+            $DB->get_records('local_classprogress_evaluation'),
+        ];
+
+        try {
+            self::call($operation, $user->id, $year->id);
+            $this->fail('Expected an exception');
+        } catch (\required_capability_exception $e) {
+            $this->assertSame('nopermissions', $e->errorcode);
+        }
+
+        $this->assertEquals($before, [
+            $DB->get_records('local_classprogress_schoolyear'),
+            $DB->get_records('local_classprogress_holiday'),
+            $DB->get_records('local_classprogress_evaluation'),
+        ]);
+    }
+
+    /**
+     * A teacher whose role is removed is refused at the next call, with no wait for a cache or a new login.
+     *
+     * @group REQ-ACC-003
+     */
+    public function test_a_removed_role_is_refused_at_once(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $this->setUser($user);
+        $id = schoolyear_service::create($user->id, self::yeardata());
+        $this->assertSame('Curs 2026-2027', schoolyear_service::get($user->id, $id)->name);
+        $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher'], MUST_EXIST);
+
+        role_unassign($roleid, $user->id, \context_course::instance($course->id)->id);
+
+        $this->expectException(\required_capability_exception::class);
+        schoolyear_service::get($user->id, $id);
+    }
+
+    /**
      * Another teacher with the same capability, or an administrator, can neither read, change nor delete the year.
      *
      * @dataProvider foreign_access_cases
+     * @group REQ-ACC-003
      * @group REQ-OWN-001
      * @param string $actor Who acts.
      * @param string $operation What they try.
