@@ -258,5 +258,5 @@ M0 is followed by review round R0 (`PLAN.md` section 6): every command in this f
 - [x] `moodle-plugin-ci` runs somewhere (container, host or Actions) and its `validate` step passes (`validate`, `phpdoc`, `phpunit` in both containers; `phplint`, `phpcs`, `mustache`, `savepoints` on the host; section 5, step 6)
 - [x] Behat init and run work on both stacks (no scenarios yet)
 - [x] This file updated: every "planned" above becomes "verified", with the real paths and commands
-- [ ] `.github/workflows/ci.yml` green on all four jobs: written, not run, because the repository has no GitHub remote yet
-- [ ] R0 check that a deliberately failing test turns CI red (needs the remote too)
+- [x] `.github/workflows/ci.yml` green on all four jobs (verified 2026-10-18: run 39121373112 on commit c9881ca at github.com/jvidal86/moodle-local_classprogress, every step including PHPUnit and Behat passed on 4.5/8.1/pgsql, 4.5/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.4/mariadb)
+- [ ] R0 check that a deliberately failing test turns CI red (remote exists; to do in review round R0)
