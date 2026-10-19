@@ -271,24 +271,44 @@ final class export_summary_test extends \basic_testcase {
     }
 
     /**
-     * Partly done days with an odd last hundredth in two blocks: the hours of the rows add up exactly to overall.
+     * Partly done days of 1.25, 0.25 and 1.75 hours: hours are exact to three decimals, so the hours of the per block
+     * and per period rows add up exactly to overall.
      *
+     * @group REQ-EXP-005
      * @group REQ-EXP-006
      */
     public function test_hours_of_the_rows_add_up_exactly(): void {
         $sessions = [
+            self::day('2026-09-30', export_summary::PARTIAL, 'RA1', 1.25),
             self::day('2026-10-01', export_summary::PARTIAL, 'RA1', 0.25),
             self::day('2026-10-02', export_summary::PARTIAL, 'RA2', 1.75),
             self::day('2026-10-05', export_summary::DONE, 'RA2', 0.05),
+            self::day('2026-10-21', export_summary::PARTIAL, '', 1.25),
+        ];
+        $periods = [
+            (object) ['name' => 'A', 'startdate' => '2026-09-14', 'enddate' => '2026-10-01'],
+            (object) ['name' => 'B', 'startdate' => '2026-10-02', 'enddate' => '2026-10-20'],
         ];
 
         $overall = export_summary::overall($sessions)[0]->figures;
-        $blocks = export_summary::per_block($sessions);
+        $tables = ['per block' => export_summary::per_block($sessions),
+            'per period' => export_summary::per_period($sessions, $periods)];
 
-        $this->assertSame([2.05, 1.05, 1.0], [$overall->plannedhours, $overall->hoursdone, $overall->hoursnotdone]);
-        $this->assertSame([0.125, 0.125], [$blocks[0]->figures->hoursdone, $blocks[0]->figures->hoursnotdone]);
-        $this->assertSame([0.925, 0.875], [$blocks[1]->figures->hoursdone, $blocks[1]->figures->hoursnotdone]);
-        $this->assertSame($overall->hoursdone, round($blocks[0]->figures->hoursdone + $blocks[1]->figures->hoursdone, 3));
+        $this->assertSame([4.55, 2.3, 2.25], [$overall->plannedhours, $overall->hoursdone, $overall->hoursnotdone]);
+        $this->assertSame([0.75, 0.75], [$tables['per block'][0]->figures->hoursdone,
+            $tables['per block'][0]->figures->hoursnotdone]);
+        $this->assertSame([0.625, 0.625], [$tables['per block'][2]->figures->hoursdone,
+            $tables['per block'][2]->figures->hoursnotdone]);
+        $this->assertSame([0.925, 0.875], [$tables['per period'][1]->figures->hoursdone,
+            $tables['per period'][1]->figures->hoursnotdone]);
+        foreach ($tables as $name => $groups) {
+            foreach (['plannedhours', 'hoursdone', 'hoursnotdone'] as $column) {
+                // In thousandths of an hour, so that the sum is compared exactly.
+                $thousandths = fn(summary_group $group): int => (int) round($group->figures->$column * 1000);
+                $sum = array_sum(array_map($thousandths, $groups));
+                $this->assertSame((int) round($overall->$column * 1000), $sum, "{$name}: {$column}");
+            }
+        }
     }
 
     /**
