@@ -110,4 +110,4 @@ Each is a named check in `PLAN.md` sections 2 and 6:
 3. Does the capability appear in the role editor with `CONTEXT_COURSE`, and does a teacher with a suspended enrolment still qualify? (M1)
 4. Is a unique index on a nullable `planitemid` equivalent on MariaDB and PostgreSQL? (M1)
 5. Which page layout (`standard` or `report`) works best on both versions? (M1)
-6. Does the `'` formula prefix show a literal apostrophe before text cells starting with `-`? (M4, both versions)
+6. ~~Does the `'` formula prefix show a literal apostrophe before text cells starting with `-`?~~ Resolved in M4: yes, on 4.5.15 and 5.3 a text cell written with `write_string()` that starts with `=`, `+`, `-` or `@` (but not a lone `-`) holds the apostrophe as part of its text (`'-1`); the export test reads it back on both stacks.

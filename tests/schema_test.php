@@ -186,7 +186,8 @@ final class schema_test extends \advanced_testcase {
 
     /**
      * Upgrading from the version before the course activity (2026101805) drops the plan tables that moved to
-     * mod_classprogress and the import limits that became its settings, and keeps the school years.
+     * mod_classprogress and the import limits that became its settings, keeps the school years and reaches the current
+     * version.
      *
      * @group REQ-DAT-001
      * @group REQ-DAT-005
@@ -198,6 +199,8 @@ final class schema_test extends \advanced_testcase {
         require_once(\core_component::get_component_directory('local_classprogress') . '/db/upgrade.php');
         require_once($CFG->libdir . '/upgradelib.php');
         $dbman = $DB->get_manager();
+        $plugin = new \stdClass();
+        require(\core_component::get_component_directory('local_classprogress') . '/version.php');
         foreach (self::MOVED as $name) {
             $table = new \xmldb_table(self::PREFIX . $name);
             $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
@@ -220,7 +223,7 @@ final class schema_test extends \advanced_testcase {
         }
 
         $this->assertFalse(get_config('local_classprogress', 'maxplansize'));
-        $this->assertSame('2026101806', (string) get_config('local_classprogress', 'version'));
+        $this->assertSame((string) $plugin->version, (string) get_config('local_classprogress', 'version'));
         $this->assertSame([], $dbman->check_database_schema(self::install_xml(), ['extratables' => false]));
         $this->assertSame(1, $DB->count_records(self::PREFIX . 'schoolyear'));
     }

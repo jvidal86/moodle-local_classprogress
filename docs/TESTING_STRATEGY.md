@@ -83,7 +83,7 @@ Executable parts of the spec today: `tools/check_plan.py` (the parser grammar), 
 
 Policy: few, user-level, readable. Created with generators (`the following "course enrolments" exist`, plus the plugin's own generator), started with `I am on the "..." page logged in as "teacher1"` (the dashboard login is slow), no fixed waits, no `@javascript` unless a step truly needs it.
 
-J1 to J3 live in this repository (`tests/behat`), J4 to J7 in `moodle-mod_classprogress` (`tests/behat/activity.feature`, `log.feature`); the activity also has two scenarios outside the J list (adding the activity, MOD-001; students, MOD-002).
+J1 to J3 live in this repository (`tests/behat`), J4 to J8 in `moodle-mod_classprogress` (`tests/behat/activity.feature`, `log.feature`, `export.feature`); the activity also has two scenarios outside the J list (adding the activity, MOD-001; students, MOD-002).
 
 | # | Scenario | Phase | Requirements |
 |---|---|---|---|
