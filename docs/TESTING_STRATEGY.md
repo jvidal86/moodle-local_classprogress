@@ -94,7 +94,7 @@ J1 to J3 live in this repository (`tests/behat`), J4 to J7 in `moodle-mod_classp
 | J5 | Importing a clean plan, reading the preview, another teacher of the course approving (with confirmation of warnings) and finding the plan read-only afterwards (activity) | M2, M3 | IMP-003, IMP-004, LCK-001, LCK-002, MOD-003, MOD-004 |
 | J6 | Logging a session on the day, then backfilling an old one: the second shows the late flag (activity) | M3 | LOG-001 to 004, LOG-006, LOG-007 |
 | J7 | Editing an entry keeps the earlier version in the history; deleting it keeps the history (activity) | M3 | LOG-005, HIS-001, HIS-002 |
-| J8 | The export page offers the file and shows the same totals as the log (the file's cells are checked in PHPUnit) | M4 | to be specified |
+| J8 | The export page offers the file and shows the same totals as the log (the file's cells are checked in PHPUnit) (activity) | M4 | EXP-001, EXP-006, EXP-009 |
 
 At R5, J1 to J8 run as one full teacher journey on both stacks.
 

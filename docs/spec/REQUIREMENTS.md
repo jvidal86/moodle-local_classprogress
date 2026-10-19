@@ -1,6 +1,6 @@
-# Requirements (phases M1 and M2)
+# Requirements
 
-Format and cycle: see `README.md`. All requirements below were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS`, `EXP` and `REL` are written at the start of their phases.
+Format and cycle: see `README.md`. The requirements of M1 to M3 were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS` and `MOD` were agreed in M3; `EXP` was agreed on 2026-10-19 for M4 and `REL` is written at the start of M5.
 
 ---
 
@@ -330,3 +330,49 @@ Plan text is displayed through Moodle's Markdown formatting with cleaning on: sc
 ### REQ-LCK-004 Dates do not move
 Phase: M2 · Status: agreed
 At approval the plan keeps its own copy of the holidays and evaluation periods it was checked against (decided 2026-10-18), so it depends on no school year afterwards. Editing or deleting holidays, timetables or the school year later never changes the dates or hours of an approved plan.
+
+---
+
+## EXP · Export (M4) · agreed 2026-10-19
+
+The layout follows the teacher's own Word tracking sheets (`~/CFGS/seguiment-programacio`, columns "Data · Previst · Realitzat · Estat · Desviació · motiu · mesura", grouped by evaluation period) and the summary of their `genera_seguiment.py --resum`, with two changes the teacher decided on 2026-10-19: coverage counts every session due, not only the logged ones, and each row names who logged it. Pure parts (the five states, the figures, Markdown to text) live in the local plugin's library; the page and the file in the activity.
+
+### REQ-EXP-001 Export page and access
+Phase: M4 · Status: agreed
+An approved plan activity offers **Export** on its log page to every user who may view it (REQ-MOD-002, REQ-MOD-004). The export page shows the summary tables of REQ-EXP-006 and a button that downloads the XLSX file; the page and the file are computed in the same way from the same data, with the same "today". A draft plan has no export (`error_plannotapproved`); a user who may not open the activity gets `error_notfound` (REQ-OWN-002).
+
+### REQ-EXP-002 The file
+Phase: M4 · Status: agreed
+One XLSX workbook with two sheets in this order, **Plan vs done** and **Summary**. Each starts with a header block: module code and title, course full name, activity name, school year dates, plan dates, planned sessions and hours, exported by (the user's full name) and exported on (their date and time). The download name is `clean_filename()` of `<module code>-<course short name>-<export date yyyy-mm-dd>.xlsx`. Dates are written as `yyyy-mm-dd` text, so no time zone can shift them.
+
+### REQ-EXP-003 Plan vs done rows
+Phase: M4 · Status: agreed
+One row per planned day and one per unplanned session, ordered by date; within a date, planned days in plan order and then unplanned sessions. Columns: date, evaluation period, block, planned (day title, then its content), planned hours, status, what was done, reason, reason note, corrective measure, continues in the next session (yes or empty), written on, days late, logged by (the full name of the user who first saved the entry, from its history; "Deleted user" when that user was erased, REQ-PRV-003). The status is the entry's (done, partly done, not done, added) or, for a planned day without an entry, **not logged** (dated today or earlier) or **upcoming** (dated after today). Days late is 0 for an entry written on its day and empty for a day without an entry.
+
+### REQ-EXP-004 Five states of a planned day
+Phase: M4 · Status: agreed
+Every planned day is in exactly one state: **done**, **partly done** or **not done** (it has an entry with that status, whatever its date; a cancellation logged in advance, REQ-LOG-009, is not done), **not logged** (no entry, dated today or earlier) or **upcoming** (no entry, dated after today). For any set of planned days, planned = done + partly done + not done + not logged + upcoming. Unplanned sessions are counted apart (**added**) and never in planned. "Today" is the exporting user's date in their time zone (REQ-LOG-001).
+
+### REQ-EXP-005 Summary figures
+Phase: M4 · Status: agreed
+For a set of days the summary gives: planned, done, partly done, not done, not logged, upcoming, added; **coverage** = (done + ½ × partly done) ÷ (done + partly done + not done + not logged), that is every planned day except the upcoming ones, as a whole percentage, empty when that divisor is 0 (decided by the teacher on 2026-10-19: a session not yet logged counts as not covered until it is logged; a partly done session counts as half, as in `genera_seguiment.py --resum`; a cancellation logged in advance counts from the moment it is logged); planned hours; **hours done** = hours of done days + ½ × hours of partly done days; **hours not done** = hours of not done days + ½ × hours of partly done days; **written late** (entries, planned or unplanned, with days late above 0) and the **most days late**. Unplanned sessions have no hours and are not in coverage.
+
+### REQ-EXP-006 Overall, per block, per evaluation period
+Phase: M4 · Status: agreed
+The Summary sheet and the export page hold three tables with the columns of REQ-EXP-005: **overall** (one row); **per block**, one row per RA or block in order of first appearance, then "No block" for days without one (REQ-PLN-003) and "Unplanned sessions" when there are any; **per evaluation period**, one row per period copied at approval (REQ-LCK-004) in date order, a day or unplanned session belonging to the period whose first and last days include it, then "Outside evaluation periods" when needed; a period with no days shows zeros. In each table the rows add up to the overall row in every count and hours column.
+
+### REQ-EXP-007 Markdown as plain text
+Phase: M4 · Status: agreed
+The planned content and the entry texts (what was done, reason note, corrective measure) are written as plain text: list items start with "• " (numbered items keep their number), heading, emphasis and code markers are removed, a link keeps its text followed by its address in brackets, HTML tags are removed and entities decoded, and line breaks stay as line breaks inside the cell. Nothing of the text is lost but the markup. Proved on the three real plans of `test-data/plans/`.
+
+### REQ-EXP-008 No formulas, no links
+Phase: M4 · Status: agreed
+Every text cell is written as text (`write_string`), on 4.5 and on 5.3, and no cell of the file holds a formula: totals and percentages are written as numbers. Text beginning with `=`, `+`, `-` or `@` stays text; Moodle 4.5 and 5.3 put an apostrophe before it, which shows in the cell (checked in `lib/classes/dataformat.php` of both versions), while list items begin with "•" and never trigger it. Addresses stay plain text, never hyperlink cells.
+
+### REQ-EXP-009 Same numbers everywhere
+Phase: M4 · Status: agreed
+The figures on the export page equal those in the file, and the overall "not logged" figure equals the number of pending sessions of the log page (REQ-LOG-001) and of the top-menu overview (REQ-MOD-005) at the same moment.
+
+### REQ-EXP-010 Large plans
+Phase: M4 · Status: agreed
+A plan of 400 days, each with an entry, exports with a number of database queries that does not grow with the number of days, and with memory raised the way core exports do (`raise_memory_limit(MEMORY_EXTRA)`).
