@@ -177,7 +177,7 @@ An XLSX importer can be added later; it would only need to produce the same list
 
 ## 5. Export
 
-**Agreed 2026-10-19 (REQ-EXP-001 to 010).** The layout below is a contract: the exporter writes it and `tools/check_export.py` (the R4 oracle) reads it by its English labels, recomputes every summary figure from the Plan vs done rows and compares.
+**Built 2026-10-19 (M4, review R4 closed, `docs/reviews/R4-M4.md`).** **Agreed 2026-10-19 (REQ-EXP-001 to 010).** The layout below is a contract: the exporter writes it and `tools/check_export.py` (the R4 oracle) reads it by its English labels, recomputes every summary figure from the Plan vs done rows and compares.
 
 - **Both sheets** start at row 1 with a header block, label in column A and value in column B: `Module`, `Course`, `Activity`, `School year`, `Plan dates`, `Planned sessions`, `Planned hours`, `Exported by`, `Exported on`. Then one empty row.
 - **Sheet `Plan vs done`:** a header row `Date | Evaluation period | Block | Planned | Planned hours | Status | What was done | Reason | Reason note | Corrective measure | Continues in the next session | Written on | Days late | Logged by`, then one row per planned day or unplanned session (REQ-EXP-003). Status texts: `Done`, `Partly done`, `Not done`, `Added`, `Not logged`, `Upcoming`. Dates (Date and Written on) are exactly `yyyy-mm-dd` text; Planned hours and Days late are numbers (Planned hours empty for an unplanned session and for a planned day without hours, which counts as 0; Days late empty for a day without an entry); an empty Block on a planned day means "No block"; an empty Evaluation period means outside every period.

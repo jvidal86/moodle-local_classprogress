@@ -25,3 +25,8 @@ The test sites were rebuilt for the two-plugin design, so the plan you created e
 ## What to report back
 - Anything that looks wrong, is confusing or reads badly.
 - Whether the fields (status, reason, measure, carry-over) are what the inspection would want to see per session. The XLSX export comes in M4 and will be built from exactly these fields, so this is the moment to ask for a field.
+
+## 4. Export (M4)
+1. On the **Session log**, click **Export**. The page shows three tables: **Overall**, **Per block** and **Per evaluation period**, with planned, done, partly done, not done, not logged, upcoming and added sessions, coverage, hours and late entries.
+2. **Coverage** is (done + half of partly done) ÷ every session due, so a session you have not logged yet counts as not covered until you log it (your decision of 2026-10-19).
+3. Download the XLSX and open it in LibreOffice and in Excel if you can: two sheets, **Plan vs done** (one row per session, like your Word sheet, plus who logged it) and **Summary** (the same three tables). The numbers must equal those on the page; no cell holds a formula. Text you typed that starts with `=`, `+`, `-` or `@` shows with an apostrophe in front: that is Moodle protecting the file.
