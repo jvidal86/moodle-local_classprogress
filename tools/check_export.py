@@ -22,20 +22,19 @@ Assumptions (literal readings where the spec leaves room)
     - A row is an unplanned session exactly when its status is `Added`; every other row is a planned day.
     - Days late counts calendar days from Date to Written on, 0 when written on or before the date (REQ-LOG-004:
       "late by N days"); Written on is yyyy-mm-dd text like every date in the file.
-    - Planned hours is a number on every planned day (the contract allows it empty only for an unplanned session).
+    - Planned hours on a planned day is a number >= 0 with at most two decimals, or empty (a day without hours,
+      warning missing_hours), which counts as 0.
     - Continues in the next session holds `yes` (any letter case) or nothing.
     - Per block, `Added` rows count in `Unplanned sessions` whatever their Block cell, and a planned day with an
       empty Block in `No block`. Per evaluation period, `Added` rows count in their period like planned days.
-    - `Unplanned sessions` ("when there are any") and `Outside evaluation periods` ("when needed") are listed only
-      when some row belongs to them; `No block` and a named period or block may be listed with no rows and then show
-      zeros with an empty coverage.
-    - Blocks are listed in order of first appearance in the Plan vs done rows (a plan imported out of date order
-      could legitimately differ). Period dates are not in the file, so periods with rows are checked to be listed in
-      the order of their first row; a period with no rows can sit anywhere among them.
-    - Coverage is rounded half up on the exact fraction. Hours are summed exactly and rounded half up to two
-      decimals (the spec names no rounding mode for hours); a cell matches when it equals that value to 0.0005.
-      "Adds up" compares the sum of the file's rounded group hours with the Overall row in the same way, so data
-      whose half hours have a third decimal (half of 0.25 h) can make a correct-looking export fail it.
+    - Every Per block row and `Outside evaluation periods` are listed only when some row belongs to them (blocks are
+      listed by their first appearance in the rows, so a block without rows has none); a named evaluation period
+      may be listed with no rows and then shows zeros with an empty coverage.
+    - Blocks are listed in order of first appearance in the Plan vs done rows. Period dates are not in the file, so
+      periods with rows are checked to be listed in the order of their first row; a period with no rows can sit
+      anywhere among them.
+    - Coverage is rounded half up on the exact fraction. Hours are exact (written with up to three decimals, the
+      stored hours having two): every hours cell, and every "adds up" sum, must equal the exact value to 1e-9.
     - Most days late is a maximum, not a count, so it is recomputed per group but not added up.
     - The header values Planned sessions and Planned hours may be numbers or numeric text; every header value must
       be non-empty and identical on both sheets (they come from one export).
@@ -53,7 +52,7 @@ import re
 import sys
 import tempfile
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 
@@ -79,10 +78,9 @@ GROUP_OF = {OVERALL: lambda x: ALL,
             PER_BLOCK: lambda x: UNPLANNED if x.status == ADDED else x.block or NO_BLOCK,
             PER_PERIOD: lambda x: x.period or OUTSIDE}
 LISTED_LAST = {OVERALL: (), PER_BLOCK: (NO_BLOCK, UNPLANNED), PER_PERIOD: (OUTSIDE,)}
-ONLY_WHEN_NEEDED = (UNPLANNED, OUTSIDE)
 ISO_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 CENT = Decimal("0.01")
-NEAR = Decimal("0.0005")
+EXACT = Decimal("1e-9")  # float noise only: the hours are exact decimals
 
 
 @dataclass
@@ -152,7 +150,7 @@ def matches(got, want, hours):
         return empty(got)
     if not is_number(got):
         return False
-    return abs(dec(got) - want) < NEAR if hours else got == want
+    return abs(dec(got) - want) <= EXACT if hours else got == want
 
 
 def figures(xs):
@@ -166,9 +164,8 @@ def figures(xs):
             "Not logged": n[NOT_LOGGED], "Upcoming": n[UPCOMING], "Added": n[ADDED],
             "Coverage (%)": math.floor(Fraction(100 * (2 * n[DONE] + n[PARTLY]), 2 * divisor) + Fraction(1, 2))
             if divisor else None,
-            "Planned hours": sum((x.hours for x in planned), Decimal(0)).quantize(CENT, ROUND_HALF_UP),
-            "Hours done": (h[DONE] + h[PARTLY] / 2).quantize(CENT, ROUND_HALF_UP),
-            "Hours not done": (h[NOT_DONE] + h[PARTLY] / 2).quantize(CENT, ROUND_HALF_UP),
+            "Planned hours": sum((x.hours for x in planned), Decimal(0)),
+            "Hours done": h[DONE] + h[PARTLY] / 2, "Hours not done": h[NOT_DONE] + h[PARTLY] / 2,
             "Written late": len(late), "Most days late": max(late, default=0)}
 
 
@@ -234,14 +231,16 @@ def read_rows(sh, start, today, out):
 
         d, status, hours, late = to_date(v["Date"]), v["Status"], v["Planned hours"], v["Days late"]
         added, entry = status == ADDED, status in (DONE, PARTLY, NOT_DONE, ADDED)
+        good_hours = is_number(hours) and hours >= 0 and dec(hours) == dec(hours).quantize(CENT)
         if d is None:
             out.append(f"{at('Date')}: date {v['Date']!r} is not yyyy-mm-dd text")
         if status not in STATUSES:
             out.append(f"{at('Status')}: unknown status {status!r}, expected one of {', '.join(STATUSES)}")
         if added and not empty(hours):
             out.append(f"{at('Planned hours')}: an unplanned session ('Added') has planned hours {hours!r}")
-        elif not added and not (is_number(hours) and hours >= 0):
-            out.append(f"{at('Planned hours')}: a planned day needs a number of hours >= 0, got {hours!r}")
+        elif not added and not empty(hours) and not good_hours:
+            out.append(f"{at('Planned hours')}: a planned day has hours >= 0 with at most two decimals, or none, "
+                       f"got {hours!r}")
         if entry:
             if not (is_number(late) and late >= 0 and late == int(late)):
                 out.append(f"{at('Days late')}: a row with an entry needs a whole number of days late >= 0, got {late!r}")
@@ -329,7 +328,7 @@ def check_summary(sh, tables, rows, out):
         for r, g in groups:
             name = g["Group"]
             xs = members.get(name, [])
-            if not xs and name in ONLY_WHEN_NEEDED:
+            if not xs and (t == PER_BLOCK or name == OUTSIDE):
                 out.append(f"{sh.at(r, 1)}: group {name!r} is listed but no row of {ROWS} belongs to it")
             want = figures(xs)
             for c, f in enumerate(FIGURES[1:], 2):
@@ -354,7 +353,7 @@ def check_summary(sh, tables, rows, out):
                 vals = [g[f] for _, g in groups]
                 if all(is_number(v) for v in vals + [overall[f]]):
                     total = sum((dec(v) for v in vals), Decimal(0))
-                    if abs(total - dec(overall[f])) >= NEAR:
+                    if abs(total - dec(overall[f])) > EXACT:
                         out.append(f"{SUMMARY}: rows of {t!r} do not add up to Overall in column {f!r}: "
                                    f"{total} vs {overall[f]!r}")
 
@@ -386,13 +385,13 @@ def check(path, today=None):
         return out
     planned = [x for x in rows if x.status != ADDED]
     want = {"Planned sessions": Decimal(len(planned)),
-            "Planned hours": sum((x.hours for x in planned), Decimal(0)).quantize(CENT, ROUND_HALF_UP)}
+            "Planned hours": sum((x.hours for x in planned), Decimal(0))}
     for sh, head in heads.values():
         for label, w in want.items():
             if label in head:
                 r, v = head[label]
                 got = number(v)
-                if got is None or abs(got - w) >= NEAR:
+                if got is None or abs(got - w) > EXACT:
                     out.append(f"{sh.at(r, 2)}: {label} is {v!r}, but the planned rows of {ROWS} give {w}")
     check_summary(summary, tables, rows, out)
     return out
@@ -411,7 +410,7 @@ def day(date, period, block, planned, hours, status, written=None, late=None, re
 
 
 # Today 2026-10-19. Outside every period: 09-11. RA2: 12.5 % coverage (13 half up, 12 half to even). Overall: 30 %,
-# 43 % if not logged were left out of the divisor. Partly done 1.25 h gives 0.625 h, so hours need a third decimal.
+# 43 % if not logged were left out of the divisor. Partly done 1.25 h gives 0.625 h: hours are written exactly.
 FIXTURE = {
     "header": [["Module", "MP03 · Programació"], ["Course", "1r DAM"], ["Activity", "Seguiment MP03"],
                ["School year", "2026-09-07 to 2027-06-21"], ["Plan dates", "2026-09-11 to 2026-11-02"],
@@ -435,13 +434,13 @@ FIXTURE = {
         day("2026-11-02", P1, RA3, "Depuració", 2, UPCOMING),
     ],
     "summary": [  # computed by hand, not by figures()
-        (OVERALL, [[ALL, 12, 2, 2, 3, 3, 2, 2, 30, 18, 4.38, 4.63, 4, 4]]),
+        (OVERALL, [[ALL, 12, 2, 2, 3, 3, 2, 2, 30, 18, 4.375, 4.625, 4, 4]]),
         (PER_BLOCK, [[RA1, 3, 2, 1, 0, 0, 0, 0, 83, 4.5, 3.75, 0.75, 1, 2],
-                     [RA2, 5, 0, 1, 1, 2, 1, 0, 13, 8.25, 0.63, 1.63, 2, 4],
+                     [RA2, 5, 0, 1, 1, 2, 1, 0, 13, 8.25, 0.625, 1.625, 2, 4],
                      [RA3, 2, 0, 0, 1, 0, 1, 0, 0, 3.5, 0, 1.5, 0, 0],
                      [NO_BLOCK, 2, 0, 0, 1, 1, 0, 0, 0, 1.75, 0, 0.75, 0, 0],
                      [UNPLANNED, 0, 0, 0, 0, 0, 0, 2, None, 0, 0, 0, 1, 1]]),
-        (PER_PERIOD, [[P1, 11, 1, 2, 3, 3, 2, 1, 22, 17, 3.38, 4.63, 3, 4],
+        (PER_PERIOD, [[P1, 11, 1, 2, 3, 3, 2, 1, 22, 17, 3.375, 4.625, 3, 4],
                       [P2, 0, 0, 0, 0, 0, 0, 0, None, 0, 0, 0, 0, 0],
                       [OUTSIDE, 1, 1, 0, 0, 0, 0, 1, 100, 1, 1, 0, 1, 1]]),
     ],
@@ -485,6 +484,13 @@ def drop(fx, table, group):
     return fx
 
 
+def add(fx, table, before, group):
+    for title, groups in fx["summary"]:
+        if title == table:
+            groups.insert(next(i for i, g in enumerate(groups) if g[0] == before), group)
+    return fx
+
+
 def cell(fx, i, column, value):
     fx["rows"][i][COLUMNS.index(column)] = value
     return fx
@@ -516,12 +522,22 @@ MUTANTS = [  # name, change to the correct fixture, a message that must appear, 
      "header label expected 'Days late', got 'Late days'", None),
     ("per-block rows not adding up", lambda f: put(put(f, PER_BLOCK, RA3, "Not done", 2), PER_BLOCK, RA3, "Planned", 3),
      "rows of 'Per block' do not add up to Overall in column 'Not done'", None),
-    ("hours off by 0.01", lambda f: put(f, PER_PERIOD, P1, "Hours done", 3.37),
-     f"(Per evaluation period / {P1}, Hours done): got 3.37, expected 3.38", None),
-    ("hours not rounded", lambda f: put(f, OVERALL, ALL, "Hours done", 4.375), "got 4.375, expected 4.38", None),
+    ("hours off by 0.001", lambda f: put(f, PER_PERIOD, P1, "Hours done", 3.374),
+     f"(Per evaluation period / {P1}, Hours done): got 3.374, expected 3.375", None),
+    ("hours rounded to two decimals", lambda f: put(f, OVERALL, ALL, "Hours done", 4.38),
+     "got 4.38, expected 4.375", None),
+    ("planned hours with three decimals", lambda f: cell(f, 3, "Planned hours", 1.505),
+     "a planned day has hours >= 0 with at most two decimals, or none, got 1.505", None),
     ("an empty period that is not zeros", lambda f: put(put(f, PER_PERIOD, P2, "Planned", 1), PER_PERIOD, P2, "Upcoming", 1),
      "Planned): got 1, expected 0 (no row of Plan vs done belongs to this group", None),
     ("a missing group row", lambda f: drop(f, PER_BLOCK, NO_BLOCK), "has no row for group 'No block'", None),
+    ("a block listed with no rows", lambda f: add(f, PER_BLOCK, NO_BLOCK, ["RA4 · Extra"] + [0] * 7 + [None] + [0] * 5),
+     "group 'RA4 · Extra' is listed but no row of Plan vs done belongs to it", None),
+    ("No block listed with no rows", lambda f: cell(cell(f, 5, "Block", RA1), 9, "Block", RA1),
+     "group 'No block' is listed but no row of Plan vs done belongs to it", None),
+    ("Outside evaluation periods listed with no rows", lambda f: cell(cell(f, 0, "Evaluation period", P1), 1,
+                                                                     "Evaluation period", P1),
+     "group 'Outside evaluation periods' is listed but no row of Plan vs done belongs to it", None),
     ("an unknown status", lambda f: cell(f, 3, "Status", "Partly Done"), "unknown status 'Partly Done'", None),
     ("an Upcoming row with an entry field", lambda f: cell(f, 11, "What was done", "Avançat"),
      "the row is 'Upcoming' (no entry) but What was done holds 'Avançat'", None),
@@ -568,6 +584,10 @@ def selftest():
         run("correct workbook, --today 2026-10-19", copy.deepcopy(FIXTURE), dt.date(2026, 10, 19), None)
         run("correct workbook, --today 2026-10-22 (a Not done after today)", copy.deepcopy(FIXTURE),
             dt.date(2026, 10, 22), None)
+        no_hours = cell(copy.deepcopy(FIXTURE), 9, "Planned hours", None)  # missing_hours: counts as 0
+        for table, group, hours in ((OVERALL, ALL, 17), (PER_BLOCK, NO_BLOCK, 0.75), (PER_PERIOD, P1, 16)):
+            put(no_hours, table, group, "Planned hours", hours)
+        run("correct workbook, a planned day without hours", put_header(no_hours, "Planned hours", 17), None, None)
         for name, mutate, want, today in MUTANTS:
             run("mutant: " + name, mutate(copy.deepcopy(FIXTURE)), today, want)
     print("\n" + ("all passed" if not failures else f"{failures} failure(s)"))
