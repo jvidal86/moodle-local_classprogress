@@ -35,9 +35,9 @@ final class summary_figures {
      * @param int $upcoming Days after today without an entry.
      * @param int $added Unplanned sessions.
      * @param int|null $coverage Whole percentage of the days due that were covered; null when none is due.
-     * @param float $plannedhours Planned hours, rounded to two decimals.
-     * @param float $hoursdone Hours done, rounded to two decimals.
-     * @param float $hoursnotdone Hours not done, rounded to two decimals.
+     * @param float $plannedhours Planned hours, exact, with up to three decimals.
+     * @param float $hoursdone Hours done, exact, with up to three decimals.
+     * @param float $hoursnotdone Hours not done, exact, with up to three decimals.
      * @param int $writtenlate Entries written after their session day.
      * @param int $mostdayslate The most days late of an entry; 0 when none was late.
      */
@@ -58,11 +58,11 @@ final class summary_figures {
         public readonly int $added,
         /** @var int|null Whole percentage of the days due that were covered; null when none is due. */
         public readonly ?int $coverage,
-        /** @var float Planned hours, rounded to two decimals. */
+        /** @var float Planned hours, exact, with up to three decimals. */
         public readonly float $plannedhours,
-        /** @var float Hours done, rounded to two decimals. */
+        /** @var float Hours done, exact, with up to three decimals. */
         public readonly float $hoursdone,
-        /** @var float Hours not done, rounded to two decimals. */
+        /** @var float Hours not done, exact, with up to three decimals. */
         public readonly float $hoursnotdone,
         /** @var int Entries written after their session day. */
         public readonly int $writtenlate,

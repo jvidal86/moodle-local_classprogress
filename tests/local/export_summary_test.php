@@ -251,11 +251,12 @@ final class export_summary_test extends \basic_testcase {
     }
 
     /**
-     * Hours are rounded half up to two decimals, and a day without hours counts none.
+     * Hours are exact, with up to three decimals (half of a partly done day's two-decimal hours), and a day without
+     * hours counts none.
      *
      * @group REQ-EXP-005
      */
-    public function test_hours_are_rounded_to_two_decimals(): void {
+    public function test_hours_are_exact_to_three_decimals(): void {
         $figures = export_summary::figures([
             self::day('2026-10-01', export_summary::PARTIAL, 'RA1', 1.25),
             self::day('2026-10-02', export_summary::DONE, 'RA1', 0.1),
@@ -265,8 +266,29 @@ final class export_summary_test extends \basic_testcase {
 
         $this->assertSame(1.55, $figures->plannedhours);
         // 0.1 + 0.2 + 0.625 = 0.925.
-        $this->assertSame(0.93, $figures->hoursdone);
-        $this->assertSame(0.63, $figures->hoursnotdone);
+        $this->assertSame(0.925, $figures->hoursdone);
+        $this->assertSame(0.625, $figures->hoursnotdone);
+    }
+
+    /**
+     * Partly done days with an odd last hundredth in two blocks: the hours of the rows add up exactly to overall.
+     *
+     * @group REQ-EXP-006
+     */
+    public function test_hours_of_the_rows_add_up_exactly(): void {
+        $sessions = [
+            self::day('2026-10-01', export_summary::PARTIAL, 'RA1', 0.25),
+            self::day('2026-10-02', export_summary::PARTIAL, 'RA2', 1.75),
+            self::day('2026-10-05', export_summary::DONE, 'RA2', 0.05),
+        ];
+
+        $overall = export_summary::overall($sessions)[0]->figures;
+        $blocks = export_summary::per_block($sessions);
+
+        $this->assertSame([2.05, 1.05, 1.0], [$overall->plannedhours, $overall->hoursdone, $overall->hoursnotdone]);
+        $this->assertSame([0.125, 0.125], [$blocks[0]->figures->hoursdone, $blocks[0]->figures->hoursnotdone]);
+        $this->assertSame([0.925, 0.875], [$blocks[1]->figures->hoursdone, $blocks[1]->figures->hoursnotdone]);
+        $this->assertSame($overall->hoursdone, round($blocks[0]->figures->hoursdone + $blocks[1]->figures->hoursdone, 3));
     }
 
     /**

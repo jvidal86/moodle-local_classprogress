@@ -22,9 +22,9 @@ namespace local_classprogress\local;
  *
  * Every planned day is in exactly one of five states (done, partly done, not done, not logged, upcoming); unplanned
  * sessions are added and never planned. Coverage is (done + ½ partly done) ÷ (every planned day but the upcoming
- * ones), a whole percentage rounded half up; hours are counted in hundredths and rounded half up to two decimals, a
- * partly done day giving half its hours to done and half to not done. The caller passes "today" as the teacher's own
- * day (see written_on::day()), so this reads no clock. Pure logic: no Moodle API.
+ * ones), a whole percentage rounded half up; hours are counted in hundredths, so they are exact with up to three
+ * decimals, a partly done day giving half its hours to done and half to not done. The caller passes "today" as the
+ * teacher's own day (see written_on::day()), so this reads no clock. Pure logic: no Moodle API.
  *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
@@ -239,12 +239,12 @@ final class export_summary {
     }
 
     /**
-     * Turns half-hundredths of an hour into hours, rounded half up to two decimals.
+     * Turns half-hundredths of an hour into hours: exact, with up to three decimals.
      *
      * @param int $halfcents Hours times 200.
      * @return float The hours.
      */
     private static function hours(int $halfcents): float {
-        return round(intdiv($halfcents + 1, 2) / 100, 2);
+        return round($halfcents / 200, 3);
     }
 }
