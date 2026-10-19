@@ -24,10 +24,11 @@
  */
 
 /**
- * Creates school years and holidays for Behat scenarios, through the plugin's data generator.
+ * Creates school years, holidays and evaluation periods for Behat scenarios, through the plugin's data generator.
  *
- * Entities: "local_classprogress > school years" (user, name) and "holidays" (schoolyear by name, startdate). Plan
- * activities are made by mod_classprogress's generator.
+ * Entities: "local_classprogress > school years" (user, name), "holidays" (schoolyear by name, startdate) and
+ * "evaluation periods" (schoolyear by name, name, startdate, enddate). Plan activities are made by mod_classprogress's
+ * generator.
  *
  * @package    local_classprogress
  * @category   test
@@ -53,6 +54,12 @@ class behat_local_classprogress_generator extends behat_generator_base {
                 'singular' => 'holiday',
                 'datagenerator' => 'holiday',
                 'required' => ['schoolyear', 'startdate'],
+                'switchids' => ['schoolyear' => 'schoolyearid'],
+            ],
+            'evaluation periods' => [
+                'singular' => 'evaluation period',
+                'datagenerator' => 'evaluation',
+                'required' => ['schoolyear', 'name', 'startdate', 'enddate'],
                 'switchids' => ['schoolyear' => 'schoolyearid'],
             ],
         ];
