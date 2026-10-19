@@ -55,7 +55,7 @@ moodle-docker-compose exec webserver vendor/bin/phpunit --group REQ-CAL-001
 # whole plugin
 moodle-docker-compose exec webserver vendor/bin/phpunit --testsuite local_classprogress_testsuite
 # on the host, no Moodle: parser examples and the requirement matrix
-python3 tools/check_plan.py --selftest && python3 tools/check_traceability.py
+python3 tools/check_plan.py --selftest && python3 tools/check_export.py --selftest && python3 tools/check_traceability.py
 ```
 
 Rules:
@@ -77,7 +77,7 @@ Rules:
 
 Change order when something changes: requirement, then test, then code. `PLAN.md` explains; `REQUIREMENTS.md` decides.
 
-Executable parts of the spec today: `tools/check_plan.py` (the parser grammar), `test-data/` (3 real plans, 11 edge cases, holidays) and `tools/check_traceability.py`.
+Executable parts of the spec today: `tools/check_plan.py` (the parser grammar), `tools/check_export.py` (the export oracle: reads an XLSX by the labels of `PLAN.md` section 5 and recomputes every Summary figure, `python3 tools/check_export.py FILE.xlsx [--today yyyy-mm-dd]`), `test-data/` (3 real plans, 11 edge cases, holidays) and `tools/check_traceability.py`.
 
 ## 5. End-to-end scenarios (Behat)
 
