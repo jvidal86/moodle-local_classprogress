@@ -46,8 +46,9 @@ git -C local/classprogress checkout v0.9.0
 A git checkout also holds the development material (plan, specification, tools, test data), which the zip leaves out;
 on a production site prefer the zip.
 
-Then run the upgrade: visit Site administration > Notifications, or run `php admin/cli/upgrade.php` from the Moodle
-folder (the `admin/cli` folder stays at the top on 5.x too). Install the activity the same way, into `mod/classprogress`
+Then run the upgrade: visit Site administration > Notifications, or run `php admin/cli/upgrade.php --non-interactive`
+from the Moodle folder (the `admin/cli` folder stays at the top on 5.x too; without `--non-interactive` the script waits
+for a confirmation). Site administration > Plugins > Plugins overview then lists the plugin at version 0.9.0, maturity Beta. Install the activity the same way, into `mod/classprogress`
 (`public/mod/classprogress` on 5.x).
 
 ## Languages
@@ -76,9 +77,18 @@ The activity's own limits (the largest plan text, the most days in a plan) are s
 
 ## Uninstall
 
-Uninstall the activity first, then this plugin (Site administration > Plugins > Plugins overview): Moodle refuses to
-uninstall this plugin while the activity, which depends on it, is installed. Then delete the `local/classprogress`
-folder (`public/local/classprogress` on 5.x), or Moodle installs the plugin again at the next upgrade.
+Uninstall the activity first, then this plugin. Moodle refuses the other order, and it also refuses this plugin while
+the activity's folder is still on disk, so delete each folder right after its plugin is uninstalled:
+
+1. Uninstall the activity: Site administration > Plugins > Plugins overview, "Class progress" under Activity modules,
+   Uninstall; or `php admin/cli/uninstall_plugins.php --plugins=mod_classprogress --run`. Then delete the
+   `mod/classprogress` folder (`public/mod/classprogress` on 5.x).
+2. Uninstall this plugin the same way ("Class progress" under Local plugins, or `--plugins=local_classprogress`), then
+   delete the `local/classprogress` folder (`public/local/classprogress` on 5.x). A folder left in place is installed
+   again at the next upgrade.
+3. Run the upgrade (Site administration > Notifications, or `php admin/cli/upgrade.php --non-interactive`). It clears
+   the plugins' cached settings and hook; until then the site says it needs upgrading, and with developer debugging on
+   its pages can stop with an error about the missing hook class.
 
 Uninstalling deletes all of the plugins' data, and it cannot be undone: this plugin's school years with their holidays
 and evaluation periods, and the activity's plans, entries and history in every course. If the record must be kept,
@@ -104,7 +114,8 @@ and their evaluation periods (name and dates), with the time each was created an
   years with their holidays and evaluation periods.
 - **An erasure** (a deletion request, or deleting the account) deletes the teacher's school years with their holidays
   and evaluation periods. What the teacher wrote in plan activities is the activity's: its content stays as the
-  course's record, and the teacher's authorship there is anonymised.
+  course's record, and the teacher's authorship there is anonymised. A deletion request processed through Data
+  requests also deletes the teacher's account afterwards: Moodle does that, not the plugin.
 
 ## Known limits
 
