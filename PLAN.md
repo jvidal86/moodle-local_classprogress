@@ -110,7 +110,7 @@ local/classprogress/
 
 **Translations:** each plugin ships `lang/en`, `lang/ca` and `lang/es` (REQ-REL-003; decided 2026-10-20, replacing the first idea of copying files into `moodledata/lang/<lang>_local/`, which rested on a wrong reading of the string manager). Publishing to the Moodle plugins directory, if it ever happens, would move translations to AMOS.
 
-**Documentation and release:** `README.md` (what it does, requirements, install, translations, privacy statement, limits) and `CHANGES.md` (newest first; the release workflow uses it as release notes). A release is a GitHub release with the two zips, built by a workflow on a `v*` tag; nothing goes to the Moodle plugins directory (decided 2026-10-20). The rules above are detailed, with sources, in `docs/moodle-rules/` and summarised in `docs/MOODLE_STANDARDS.md`. How to set up and use the development environment (test stacks, labs, daily workflow, M0 checklist) is in `docs/DEV_ENVIRONMENT.md`.
+**Documentation and release:** `README.md` (what it does, requirements, install, translations, privacy statement, limits) and `CHANGES.md` (newest first; the release workflow uses it as release notes). A release is a GitHub release in each repository with that plugin's zip, built by a workflow on a `v*` tag; nothing goes to the Moodle plugins directory (decided 2026-10-20). The rules above are detailed, with sources, in `docs/moodle-rules/` and summarised in `docs/MOODLE_STANDARDS.md`. How to set up and use the development environment (test stacks, labs, daily workflow, M0 checklist) is in `docs/DEV_ENVIRONMENT.md`.
 
 ## 3b. Hybrid architecture (decision 12, 2026-10-18)
 

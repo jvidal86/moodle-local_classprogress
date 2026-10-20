@@ -381,7 +381,7 @@ A plan of 400 days, each with an entry, exports with a number of database querie
 
 ## REL · Release (M5) · agreed 2026-10-20
 
-What a school needs to install, run, translate and remove both plugins, and what the teacher needs to trust them in front of the inspection. Decided by the teacher on 2026-10-20: the translations ship inside each plugin, and a release is published as a GitHub release with the two zips attached (built by a workflow on a `v*` tag, with a manual dry run that builds the zips without releasing), not in the Moodle plugins directory. Each requirement has an automatic test; the checks that only a person can make (installing the real zip on fresh sites, upgrading the lab with its data, uninstalling, reading the translations and the README, opening the file in LibreOffice) are listed for review round R5 in `PLAN.md` section 6.3.
+What a school needs to install, run, translate and remove both plugins, and what the teacher needs to trust them in front of the inspection. Decided by the teacher on 2026-10-20: the translations ship inside each plugin, and each plugin's release is published as a GitHub release of its repository with its zip attached (built by a workflow on a `v*` tag, with a manual dry run that builds the zip without releasing), not in the Moodle plugins directory. Each requirement has an automatic test; the checks that only a person can make (installing the real zip on fresh sites, upgrading the lab with its data, uninstalling, reading the translations and the README, opening the file in LibreOffice) are listed for review round R5 in `PLAN.md` section 6.3.
 
 ### REQ-REL-001 Release versions
 Phase: M5 · Status: agreed
