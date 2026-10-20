@@ -54,9 +54,7 @@ final class release_package_test extends \advanced_testcase {
         $this->resetAfterTest();
         $files = self::unpack(self::build_zip());
 
-        $missing = array_values(array_filter(self::REQUIRED, fn(string $path): bool => !isset($files[self::ROOT . '/' . $path])));
-
-        $this->assertSame([], $missing);
+        $this->assertSame([], array_values(array_diff(self::REQUIRED, self::found(self::REQUIRED, $files))));
         $this->assertArrayHasKey(self::ROOT . '/lang/en/local_classprogress.php', $files);
         $this->assertArrayHasKey(self::ROOT . '/db/install.xml', $files);
     }
@@ -70,11 +68,10 @@ final class release_package_test extends \advanced_testcase {
         $this->resetAfterTest();
         $files = self::unpack(self::build_zip());
 
-        $roots = array_unique(array_map(fn(string $path): string => strstr($path, '/', true) ?: $path, array_keys($files)));
-        $this->assertSame([self::ROOT], array_values($roots));
-        $present = array_values(array_filter(self::LEFT_OUT, fn(string $path): bool => isset($files[self::ROOT . '/' . $path])));
-        $this->assertSame([], $present);
-        $this->assertSame([], array_filter(array_keys($files), fn(string $path): bool => str_contains($path, '/.git/')));
+        $roots = array_map(fn(string $path): string => strstr($path, '/', true) ?: $path, array_keys($files));
+        $this->assertSame([self::ROOT], array_values(array_unique($roots)));
+        $this->assertSame([], self::found(self::LEFT_OUT, $files));
+        $this->assertSame([], preg_grep('~/\.git/~', array_keys($files)));
     }
 
     /**
@@ -111,11 +108,14 @@ final class release_package_test extends \advanced_testcase {
      */
     private static function build_zip(): string {
         $dir = \core_component::get_component_directory(self::COMPONENT);
-        $ignored = array_merge(self::patterns($dir . '/.gitattributes', true), self::patterns($dir . '/.gitignore', false));
+        $ignored = array_merge(
+            self::patterns($dir . '/.gitattributes', true),
+            self::patterns($dir . '/.gitignore', false)
+        );
 
         $entries = [];
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
-        foreach ($iterator as $file) {
+        $folder = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS);
+        foreach (new \RecursiveIteratorIterator($folder) as $file) {
             $path = substr($file->getPathname(), strlen($dir) + 1);
             if (!$file->isFile() || in_array('.git', explode('/', $path), true) || self::is_ignored($path, $ignored)) {
                 continue;
@@ -139,6 +139,17 @@ final class release_package_test extends \advanced_testcase {
      */
     private static function unpack(string $zip): array {
         return \core_plugin_manager::instance()->unzip_plugin_file($zip, make_request_directory(), '');
+    }
+
+    /**
+     * The paths that a zip holds, out of a list.
+     *
+     * @param string[] $paths Paths relative to the zip's root; folders end with /.
+     * @param array $files What the zip holds, from unpack().
+     * @return string[] The paths of the list that it holds.
+     */
+    private static function found(array $paths, array $files): array {
+        return array_values(array_filter($paths, fn(string $path): bool => isset($files[self::ROOT . '/' . $path])));
     }
 
     /**

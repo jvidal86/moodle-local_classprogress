@@ -65,10 +65,11 @@ final class release_version_test extends \advanced_testcase {
         $code = file_get_contents(\core_component::get_component_directory('local_classprogress') . '/db/upgrade.php');
 
         preg_match_all('/if \(\$oldversion < (\d{10})\) \{(.*?)\n    \}/s', $code, $steps, PREG_SET_ORDER);
-        $this->assertNotEmpty($steps);
+        // Every savepoint lies in a step that was read.
+        $this->assertSame(preg_match_all('/^\s+upgrade_\w+_savepoint\(true, \d{10}/m', $code), count($steps));
         foreach ($steps as [, $version, $body]) {
             if ((int) $version > self::LAST_INSTALLED) {
-                $this->assertDoesNotMatchRegularExpression('/\$dbman|\$DB|_config\(/', $body, "Upgrade step {$version}");
+                $this->assertDoesNotMatchRegularExpression('/\$dbman|\$DB|_config\(/', $body, "Step {$version}");
             }
         }
     }
