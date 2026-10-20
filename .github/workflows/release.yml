@@ -1,0 +1,136 @@
+# Builds the plugin's release zip and, on a v* tag, publishes it as a GitHub release (REQ-REL-002).
+# Run by hand (workflow_dispatch) it is a dry run: it builds and checks the zip and keeps it, with the release notes,
+# as a workflow artifact, and creates no release and no tag. The same file is kept in both repositories.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # gh release create, on a tag only.
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Read component, release and maturity from version.php
+        id: version
+        run: |
+          php -r '
+            define("MOODLE_INTERNAL", true);
+            define("MATURITY_ALPHA", 50);
+            define("MATURITY_BETA", 100);
+            define("MATURITY_RC", 150);
+            define("MATURITY_STABLE", 200);
+            $plugin = new stdClass();
+            require "version.php";
+            $maturities = [50 => "alpha", 100 => "beta", 150 => "rc", 200 => "stable"];
+            if (!preg_match("/^[a-z]+_[a-z][a-z0-9_]*$/", $plugin->component ?? "")
+                    || !preg_match("/^[0-9]+\.[0-9]+\.[0-9]+$/", $plugin->release ?? "")
+                    || !isset($maturities[$plugin->maturity ?? 0])) {
+                fwrite(STDERR, "version.php needs a component, a release such as 0.9.0 and a maturity\n");
+                exit(1);
+            }
+            echo "component={$plugin->component}\n";
+            echo "release={$plugin->release}\n";
+            echo "maturity={$maturities[$plugin->maturity]}\n";
+          ' >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      - name: Check the tag is v and the release
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          RELEASE: ${{ steps.version.outputs.release }}
+        run: |
+          if [ "$TAG" != "v$RELEASE" ]; then
+            echo "::error::The tag $TAG does not match the release $RELEASE of version.php: it must be v$RELEASE."
+            exit 1
+          fi
+
+      - name: Take the release notes from CHANGES.md
+        id: notes
+        env:
+          RELEASE: ${{ steps.version.outputs.release }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          heading=$(grep -m 1 '^## ' CHANGES.md || true)
+          case "$heading" in
+            "## $RELEASE" | "## $RELEASE "*) ;;
+            *)
+              echo "::error::The first release in CHANGES.md is '$heading', not '## $RELEASE'."
+              exit 1
+              ;;
+          esac
+          if [ "$EVENT" = push ] && [[ "$heading" == *unreleased* ]]; then
+            echo "::error::CHANGES.md still says '$heading': set the release date before tagging."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/dist"
+          notes="$RUNNER_TEMP/dist/release-notes.md"
+          # The lines after the first "## " heading, up to the next one.
+          awk '/^## / { n++; next } n == 1 { print }' CHANGES.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "::error::The section '$heading' of CHANGES.md is empty."
+            exit 1
+          fi
+          echo "file=$notes" >> "$GITHUB_OUTPUT"
+          cat "$notes"
+
+      - name: Build the zip
+        id: zip
+        env:
+          COMPONENT: ${{ steps.version.outputs.component }}
+          RELEASE: ${{ steps.version.outputs.release }}
+        run: |
+          zip="$RUNNER_TEMP/dist/$COMPONENT-$RELEASE.zip"
+          git archive --format=zip --prefix=classprogress/ -o "$zip" HEAD
+          echo "file=$zip" >> "$GITHUB_OUTPUT"
+
+      - name: Check the zip
+        env:
+          ZIP: ${{ steps.zip.outputs.file }}
+        run: bash .github/scripts/check-release-zip.sh "$ZIP"
+
+      - name: Keep the zip and the notes (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.version.outputs.component }}-${{ steps.version.outputs.release }}
+          path: |
+            ${{ steps.zip.outputs.file }}
+            ${{ steps.notes.outputs.file }}
+          if-no-files-found: error
+
+      - name: Create the GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          MATURITY: ${{ steps.version.outputs.maturity }}
+          ZIP: ${{ steps.zip.outputs.file }}
+          NOTES: ${{ steps.notes.outputs.file }}
+        run: |
+          flags=(--verify-tag --title "$TAG" --notes-file "$NOTES")
+          if [ "$MATURITY" != stable ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" "$ZIP" "${flags[@]}"
