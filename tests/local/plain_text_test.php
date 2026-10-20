@@ -87,6 +87,35 @@ final class plain_text_test extends \basic_testcase {
     }
 
     /**
+     * Emphasis that is never closed costs time in proportion to the text, not to its square: a plan day at the size
+     * limit (200 KB) made of unclosed markers converts at once and loses nothing (R5-2).
+     *
+     * @group REQ-EXP-007
+     */
+    public function test_unclosed_emphasis_converts_in_linear_time(): void {
+        foreach (['**a ', '__a ', '~~a ', '*a ', '_a '] as $piece) {
+            $text = str_repeat($piece, 50000);
+            $started = hrtime(true);
+            $plain = plain_text::from_markdown($text);
+            $this->assertLessThan(1.0, (hrtime(true) - $started) / 1e9, $piece);
+            $this->assertSame(rtrim($text), $plain, $piece);
+        }
+    }
+
+    /**
+     * Emphasis up to 300 characters long loses its markers; a longer one keeps them, which is what keeps the conversion
+     * linear (R5-2). Nothing of the text is lost either way.
+     *
+     * @group REQ-EXP-007
+     */
+    public function test_emphasis_longer_than_300_characters_keeps_its_markers(): void {
+        $short = str_repeat('x', 300);
+        $long = str_repeat('x', 301);
+        $this->assertSame($short, plain_text::from_markdown("**{$short}**"));
+        $this->assertSame("**{$long}**", plain_text::from_markdown("**{$long}**"));
+    }
+
+    /**
      * The three real plans.
      *
      * @return array

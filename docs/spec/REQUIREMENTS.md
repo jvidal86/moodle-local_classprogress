@@ -363,7 +363,7 @@ The Summary sheet and the export page hold three tables with the columns of REQ-
 
 ### REQ-EXP-007 Markdown as plain text
 Phase: M4 · Status: agreed
-The planned content and the entry texts (what was done, reason note, corrective measure) are written as plain text: list items start with "• " (numbered items keep their number), heading, emphasis and code markers are removed, a link keeps its text followed by its address in brackets, HTML tags are removed and entities decoded, and line breaks stay as line breaks inside the cell. Nothing of the text is lost but the markup. Proved on the three real plans of `test-data/plans/`.
+The planned content and the entry texts (what was done, reason note, corrective measure) are written as plain text: list items start with "• " (numbered items keep their number), heading, emphasis and code markers are removed, a link keeps its text followed by its address in brackets, HTML tags are removed and entities decoded, and line breaks stay as line breaks inside the cell. Nothing of the text is lost but the markup. Proved on the three real plans of `test-data/plans/`. An emphasis longer than 300 characters keeps its markers, so that the conversion takes time in proportion to the text even when markers are never closed (clarified 2026-10-20, R5-2).
 
 ### REQ-EXP-008 No formulas, no links
 Phase: M4 · Status: agreed

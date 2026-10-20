@@ -39,6 +39,12 @@ final class plain_text {
     private const WORD = '[\p{L}\p{N}_]';
 
     /**
+     * @var int Longest emphasis whose markers go, in characters. The bound keeps each unclosed marker's search short, so
+     *     a line full of them costs time in proportion to its length rather than to its square (R5-2).
+     */
+    private const MAX_EMPHASIS = 300;
+
+    /**
      * Converts Markdown to plain text.
      *
      * @param string $markdown The Markdown, as typed.
@@ -128,13 +134,14 @@ final class plain_text {
         $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
         $text = preg_replace('/<!--.*?-->/s', '', $text);
         $text = preg_replace('/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/', '', $text);
-        // Emphasis: strong before plain; an underscore must not touch a letter outside it.
+        // Emphasis: strong before plain; an underscore must not touch a letter outside it; at most MAX_EMPHASIS long.
         $word = self::WORD;
-        $text = preg_replace('/\*\*(?=\S)(.+?)(?<=\S)\*\*/u', '$1', $text);
-        $text = preg_replace("/(?<!{$word})__(?=\\S)(.+?)(?<=\\S)__(?!{$word})/u", '$1', $text);
-        $text = preg_replace('/\*(?=[^\s*])(.+?)(?<=[^\s*])\*/u', '$1', $text);
-        $text = preg_replace("/(?<!{$word})_(?=[^\\s_])(.+?)(?<=[^\\s_])_(?!{$word})/u", '$1', $text);
-        $text = preg_replace('/~~(?=\S)(.+?)(?<=\S)~~/u', '$1', $text);
+        $in = '(.{1,' . self::MAX_EMPHASIS . '}?)';
+        $text = preg_replace('/\*\*(?=\S)' . $in . '(?<=\S)\*\*/u', '$1', $text);
+        $text = preg_replace("/(?<!{$word})__(?=\\S){$in}(?<=\\S)__(?!{$word})/u", '$1', $text);
+        $text = preg_replace('/\*(?=[^\s*])' . $in . '(?<=[^\s*])\*/u', '$1', $text);
+        $text = preg_replace("/(?<!{$word})_(?=[^\\s_]){$in}(?<=[^\\s_])_(?!{$word})/u", '$1', $text);
+        $text = preg_replace('/~~(?=\S)' . $in . '(?<=\S)~~/u', '$1', $text);
         return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
