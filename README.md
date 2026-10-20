@@ -113,7 +113,8 @@ and their evaluation periods (name and dates), with the time each was created an
   version.
 - The top-menu link is decided once per session: a teacher who is given, or loses, a teacher role sees the link appear
   or go after their next login. The page itself checks at once.
-- A school year cannot be shared: each teacher of a course keeps their own.
+- A school year belongs to one teacher and cannot be shared: a plan activity keeps the school year it was given, and
+  another editing teacher of the course can only move a draft into one of their own school years.
 - The plugins add no JavaScript of their own: dates are chosen with Moodle's own date selectors, and nothing is copied
   to the clipboard for you.
 
