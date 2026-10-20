@@ -33,7 +33,7 @@ sudo apt install php8.3-zip php8.3-gd php8.3-pgsql php8.3-mysql php8.3-xdebug
 
 ## 3. Repository layout (proposed)
 
-The Marketplace release is built with `git archive` of the repository, so **the project folder becomes the plugin root** and everything that is not part of the plugin is excluded from the zip with `.gitattributes` (`export-ignore`):
+The release zip is built with `git archive` of the repository (section 10), so **the project folder becomes the plugin root** and everything that is not part of the plugin is excluded from the zip with `.gitattributes` (`export-ignore`):
 
 ```
 class-progress-tracking/          = local/classprogress inside Moodle
@@ -275,3 +275,42 @@ M0 is followed by review round R0 (`PLAN.md` section 6): every command in this f
 - [x] This file updated: every "planned" above becomes "verified", with the real paths and commands
 - [x] `.github/workflows/ci.yml` green on all four jobs (verified 2026-10-18: run 39121373112 on commit c9881ca at github.com/jvidal86/moodle-local_classprogress, every step including PHPUnit and Behat passed on 4.5/8.1/pgsql, 4.5/8.3/mariadb, 5.3/8.3/pgsql, 5.3/8.4/mariadb)
 - [x] R0 check that a deliberately failing test turns CI red (verified 2026-10-18: run 39122800125 failed at the PHPUnit step on all four jobs; see `docs/reviews/R0-M0.md`)
+
+## 10. Release
+
+A release is a GitHub release in each repository with that plugin's zip attached, built by `.github/workflows/release.yml` (the same file in both repositories; REQ-REL-002). Nothing goes to the Moodle plugins directory. The zip is `<component>-<release>.zip`, made with `git archive --format=zip --prefix=classprogress/` of the tagged commit, so the `export-ignore` lines of the committed `.gitattributes` decide what stays out, and `.github/scripts/check-release-zip.sh` checks it: one root folder `classprogress/`, with `README.md`, `CHANGES.md`, `version.php` and files in `lang/en`, `lang/ca` and `lang/es`, and none of `PLAN.md`, `docs/`, `prototype/`, `test-data/`, `tools/`, `.github/`, `.gitattributes`, `.gitignore`, `.moodle-plugin-ci.yml`. The release notes are the section of `CHANGES.md` under its first heading, which must be the `release` of `version.php`.
+
+**Dry run** (builds and checks the zip, creates no release and no tag): in the repository's Actions tab choose "Release", then "Run workflow" and the branch; or from the repository folder:
+
+```bash
+gh workflow run release.yml --ref main
+gh run list --workflow release.yml --limit 1     # the id of the run just started
+gh run watch <id>
+gh run download <id>                             # folder <component>-<release> with the zip and release-notes.md
+```
+
+Until the Catalan and Spanish strings are merged, the dry run fails at "Check the zip" with `missing from the zip: classprogress/lang/ca/` (and `lang/es/`): that is expected, not a fault of the workflow.
+
+**Cutting a release** (0.9.0 shown), once CI is green on `main` in both repositories:
+
+1. In each repository set the date in `CHANGES.md` (`## 0.9.0 (unreleased)` becomes `## 0.9.0 (2026-10-27)`), commit and push to `main`, and wait for CI to be green again. A tag run refuses a `CHANGES.md` whose release still says "unreleased".
+2. The local plugin first, since the activity's `version.php` needs its version (and the activity's CI installs the local plugin from its `main`):
+   ```bash
+   cd ~/PROJECTS/class-progress-tracking && git switch main && git pull
+   git tag v0.9.0 && git push origin v0.9.0
+   ```
+   The workflow checks that the tag is `v` followed by the `release` of `version.php`, builds and checks the zip, and creates the GitHub release `v0.9.0` with the zip and the notes, marked as a pre-release unless `maturity` is `MATURITY_STABLE`. Check the release page before going on.
+3. Then the activity, the same way, in `~/PROJECTS/moodle-mod_classprogress`.
+
+If a tag run fails, nothing has been published: delete the tag (`git push origin --delete v0.9.0 && git tag -d v0.9.0`), fix `main`, and tag again.
+
+**Checking a zip by hand**, a dry run's, a release's or one built from your own commit (commit first: `git archive` reads the committed `.gitattributes`):
+
+```bash
+cd ~/PROJECTS/class-progress-tracking        # or ~/PROJECTS/moodle-mod_classprogress
+z=$(mktemp -d)/local_classprogress-0.9.0.zip
+git archive --format=zip --prefix=classprogress/ -o "$z" HEAD
+.github/scripts/check-release-zip.sh "$z"     # prints OK and exits 0, or each problem and exits 1
+```
+
+Verified 2026-10-20 on branch `m5/docs` of both repositories: the zip of HEAD fails only on the missing `lang/ca` and `lang/es`; a copy with those two folders added passes; a copy with `docs/` and `.gitignore` added, or with a file outside `classprogress/`, fails. The workflow itself has not run on GitHub yet.
