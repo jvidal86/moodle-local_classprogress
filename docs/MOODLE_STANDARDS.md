@@ -47,7 +47,7 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 - [ ] `defined('MOODLE_INTERNAL') || die();` only where the sniff wants it: files with side effects or several artifacts (`db/access.php`, `hooks.php`, `caches.php`, `events.php`, `settings.php`, class files with `require_once`). Not in single-class files, not in `db/upgrade.php`, not in `lang/` or Behat files.
 - [ ] `version.php`: `component`, bumped `version`, `requires`, `supported`, semver `release`, `maturity`. Any change to `db/hooks.php`, `caches.php`, `access.php`, `events.php` bumps the version.
 - [ ] New table or field: `install.xml` plus an `upgrade.php` step with a `field_exists`/`table_exists` guard and a savepoint equal to the new version.
-- [ ] Strings only in `lang/en`, sorted by `strcmp` byte order, with `_desc`, `cachedef_` and `privacy:metadata:` keys. No concatenated fragments.
+- [ ] Strings in `lang/en` (and their Catalan and Spanish translations in `lang/ca`, `lang/es`, same keys, REQ-REL-003), sorted by `strcmp` byte order, with `_desc`, `cachedef_` and `privacy:metadata:` keys. No concatenated fragments.
 - [ ] Unique constraints as unique indexes unless the column is also a foreign key, in which case a `foreign-unique` key (XMLDB refuses both on one column); key names like `planid-sessiondate`.
 - [ ] Templates have the `@template` docblock with an example context; `export_for_template()` returns only scalars, arrays and `stdClass`.
 - [ ] No `unserialize`, `print_r`, `error_log`, `extract`, `sizeof`; errors are `moodle_exception` with a lang string id.
@@ -97,10 +97,10 @@ Our rule: no attributes in tests, no 5.x-only page API (`set_show_navigation_foo
 
 ## 6. Release checklist
 
-- [ ] `README.md` (what it does, requirements, install, translations into `moodledata/lang/<lang>_local/`, privacy statement, limits) and `CHANGES.md` (newest first).
+- [ ] `README.md` (what it does, requirements, install, languages, settings and limits, uninstall, privacy statement, known limits; REQ-REL-004) and `CHANGES.md` (newest first).
 - [ ] CI green on all four matrix jobs.
 - [ ] Fresh install and upgrade tried in `moodle-docker` on 4.5 (PHP 8.1) and 5.3 (PHP 8.3).
-- [ ] Public repository and issue tracker, screenshots, GPL v3+ headers, privacy API implemented; tag `vX.Y.Z` with the Marketplace release workflow and secret.
+- [ ] Public repository and issue tracker, GPL v3+ headers, privacy API implemented; tag `vX.Y.Z` runs the GitHub release workflow (zip attached to a GitHub release; no Moodle plugins directory, decided 2026-10-20).
 
 ## 7. Open points the plugins did not settle
 

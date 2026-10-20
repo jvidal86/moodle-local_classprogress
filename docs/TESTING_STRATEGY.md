@@ -83,7 +83,7 @@ Executable parts of the spec today: `tools/check_plan.py` (the parser grammar), 
 
 Policy: few, user-level, readable. Created with generators (`the following "course enrolments" exist`, plus the plugin's own generator), started with `I am on the "..." page logged in as "teacher1"` (the dashboard login is slow), no fixed waits, no `@javascript` unless a step truly needs it.
 
-J1 to J3 live in this repository (`tests/behat`), J4 to J8 in `moodle-mod_classprogress` (`tests/behat/activity.feature`, `log.feature`, `export.feature`); the activity also has two scenarios outside the J list (adding the activity, MOD-001; students, MOD-002).
+J1 to J3 live in this repository (`tests/behat`), J4 to J9 in `moodle-mod_classprogress` (`tests/behat/activity.feature`, `log.feature`, `export.feature`); the activity also has two scenarios outside the J list (adding the activity, MOD-001; students, MOD-002).
 
 | # | Scenario | Phase | Requirements |
 |---|---|---|---|
@@ -95,6 +95,7 @@ J1 to J3 live in this repository (`tests/behat`), J4 to J8 in `moodle-mod_classp
 | J6 | Logging a session on the day, then backfilling an old one: the second shows the late flag (activity) | M3 | LOG-001 to 004, LOG-006, LOG-007 |
 | J7 | Editing an entry keeps the earlier version in the history; deleting it keeps the history (activity) | M3 | LOG-005, HIS-001, HIS-002 |
 | J8 | The export page offers the file and shows the same totals as the log (the file's cells are checked in PHPUnit) (activity) | M4 | EXP-001, EXP-006, EXP-009 |
+| J9 | From start to finish: school year with holidays and evaluation periods, a new activity, a real plan imported and approved, sessions logged by two teachers (done, partly done, not done, unplanned, late), the overview's pending count, the export totals; a student sees nothing (activity) | M5 | REL-005 |
 
 At R5, J1 to J8 run as one full teacher journey on both stacks.
 

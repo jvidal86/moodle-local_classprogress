@@ -1,6 +1,6 @@
 # Requirements
 
-Format and cycle: see `README.md`. The requirements of M1 to M3 were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS` and `MOD` were agreed in M3; `EXP` was agreed on 2026-10-19 for M4 and `REL` is written at the start of M5.
+Format and cycle: see `README.md`. The requirements of M1 to M3 were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS` and `MOD` were agreed in M3; `EXP` was agreed on 2026-10-19 for M4 and `REL` on 2026-10-20 for M5.
 
 ---
 
@@ -376,3 +376,37 @@ The figures on the export page equal those in the file, and the overall "not log
 ### REQ-EXP-010 Large plans
 Phase: M4 · Status: agreed
 A plan of 400 days, each with an entry, exports with a number of database queries that does not grow with the number of days, and with memory raised the way core exports do (`raise_memory_limit(MEMORY_EXTRA)`).
+
+---
+
+## REL · Release (M5) · agreed 2026-10-20
+
+What a school needs to install, run, translate and remove both plugins, and what the teacher needs to trust them in front of the inspection. Decided by the teacher on 2026-10-20: the translations ship inside each plugin, and a release is published as a GitHub release with the two zips attached (built by a workflow on a `v*` tag, with a manual dry run that builds the zips without releasing), not in the Moodle plugins directory. Each requirement has an automatic test; the checks that only a person can make (installing the real zip on fresh sites, upgrading the lab with its data, uninstalling, reading the translations and the README, opening the file in LibreOffice) are listed for review round R5 in `PLAN.md` section 6.3.
+
+### REQ-REL-001 Release versions
+Phase: M5 · Status: agreed
+Both plugins are released as `0.9.0` with maturity `MATURITY_BETA` (decided by the teacher on 2026-10-20: `1.0.0` stable follows a few weeks of real classes), a `version` above every earlier one (2026101900, installed on the lab), `requires` 2024100700 (4.5.0) and `supported` [405, 503]; the activity depends on the local plugin's release version. The release changes no table, so a site with 0.1.0 data upgrades without losing any of it.
+
+### REQ-REL-002 The release zip
+Phase: M5 · Status: agreed
+Each plugin's release is a zip built with `git archive --prefix=classprogress/` of its release tag: one root folder `classprogress` holding the plugin, with `README.md`, `CHANGES.md`, `version.php`, `lang/en`, `lang/ca`, `lang/es` and the tests, and none of the development material (`PLAN.md`, `docs/`, `prototype/`, `test-data/`, `tools/`, `.github/`, `.gitattributes`, `.gitignore`, `.moodle-plugin-ci.yml`). Moodle's own package validator (`\core\update\validator`, the one behind "Install plugins") accepts it on 4.5 and 5.3.
+
+### REQ-REL-003 Catalan and Spanish
+Phase: M5 · Status: agreed
+Every English string of both plugins has a Catalan and a Spanish translation in `lang/ca/` and `lang/es/` inside the plugin: the same keys and no others, the same placeholders (`{$a}`, `{$a->name}`), and no string left in English unless it is listed as the same in both languages (such as "XLSX"). A user whose language is Catalan or Spanish sees both plugins, the export page and the exported file (sheet names, headers, statuses) in that language once the site has that language pack, with no file copied by hand (Moodle 4.5 and 5.3 read a plugin's own `lang/<lang>/` folder: `lib/classes/string_manager_standard.php`, lines 187 to 190 on both). The export oracle `tools/check_export.py` keeps checking the English file.
+
+### REQ-REL-004 README and CHANGES
+Phase: M5 · Status: agreed
+Each plugin's zip holds a `README.md` with these sections: what it does; requirements (Moodle 4.5 to 5.3, PHP 8.1 or later, the other plugin); install (from the zip or from git, the local plugin first, the folders on 4.5 and on 5.x); languages; settings and limits; uninstall (the activity first, then the local plugin; uninstalling deletes all their data); privacy (what is stored and for how long, who can read it, that site administrators can read the database and nothing is encrypted, that erasing a user anonymises their part of a plan activity); known limits (an approved plan cannot be changed, while an editing teacher can still delete the activity and its record with it). `CHANGES.md` lists releases newest first, and its first entry is the `release` of `version.php`.
+
+### REQ-REL-005 From start to finish
+Phase: M5 · Status: agreed
+One Behat journey (J9, in the activity's repository), on 4.5 and 5.3: a teacher creates a school year with holidays and evaluation periods, adds a Class progress activity to a course, imports a real plan from `test-data/plans/`, approves it, logs sessions (done, partly done, not done with a reason, an unplanned session, one written late), sees the pending count in the top-menu overview, and opens the export page, whose totals match the log; a second teacher of the course logs a session too; a student of the course sees neither the link nor the activity.
+
+### REQ-REL-006 Privacy request end to end
+Phase: M5 · Status: agreed
+Through the site's data privacy tool (`tool_dataprivacy`), on both versions: a data export request for a teacher, once approved and processed by its task, gives a file that holds their school years, holidays and evaluation periods and, under each plan activity, the entries and history rows they authored (REQ-PRV-002); a data deletion request, once approved and processed, leaves the site as REQ-PRV-003 says, and other teachers' data unchanged.
+
+### REQ-REL-007 Accessibility
+Phase: M5 · Status: agreed
+Every page of both plugins (the top-menu page, the school year pages, and the activity's settings, import and preview, plan, log, entry, history and export pages) passes Moodle's automated accessibility check (`the page should meet accessibility standards`, axe) on 4.5 and 5.3, with the forms in both their empty and their error state. Every form field has a label, and every action is a link or a button that the keyboard reaches; the plugins add no JavaScript of their own.
