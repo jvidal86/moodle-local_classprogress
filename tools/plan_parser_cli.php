@@ -37,6 +37,12 @@
 use local_classprogress\local\plan_parser;
 use local_classprogress\local\plan_result;
 
+// A git checkout on a web server would otherwise run this through the web, where it reads files named in its arguments.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit(1);
+}
+
 foreach (['plan_module', 'plan_day', 'plan_issue', 'plan_result', 'plan_parser'] as $classname) {
     require_once(__DIR__ . '/../classes/local/' . $classname . '.php');
 }

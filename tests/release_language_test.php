@@ -29,12 +29,8 @@ final class release_language_test extends \advanced_testcase {
     /** @var string The plugin's component name. */
     private const COMPONENT = 'local_classprogress';
 
-    /**
-     * @var string[] Keys whose text is the same in English, Catalan and Spanish (such as "XLSX").
-     *
-     * Empty until the translations are merged; the translators' reports list the keys that belong here.
-     */
-    private const SAME_IN_ALL_LANGUAGES = [];
+    /** @var string[] Keys whose Catalan or Spanish text may equal the English one: none in this plugin. */
+    private const SAME_AS_ENGLISH = [];
 
     /** @var string A placeholder: {$a}, {$a->name}, or a plain {name} that core fills in, such as {no}. */
     private const PLACEHOLDER = '/\{\$a(?:->\w+)?\}|\{\w+\}/';
@@ -119,13 +115,13 @@ final class release_language_test extends \advanced_testcase {
         $english = $this->strings('en');
         $same = [];
         foreach ($this->strings($lang) as $key => $text) {
-            if (($english[$key] ?? null) === $text && !in_array($key, self::SAME_IN_ALL_LANGUAGES, true)) {
+            if (($english[$key] ?? null) === $text && !in_array($key, self::SAME_AS_ENGLISH, true)) {
                 $same[] = $key;
             }
         }
 
         $this->assertSame([], $same);
-        $this->assertSame([], array_values(array_diff(self::SAME_IN_ALL_LANGUAGES, array_keys($english))));
+        $this->assertSame([], array_values(array_diff(self::SAME_AS_ENGLISH, array_keys($english))));
     }
 
     /**
