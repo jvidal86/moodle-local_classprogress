@@ -1,6 +1,6 @@
 # Class progress tracking: Moodle plugin plan
 
-Status (2026-10-21): M0 to M5 done, each with its review round closed (`docs/reviews/`); 0.9.0 beta released on 2026-10-21, a GitHub prerelease of each plugin. Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
+Status (2026-10-21): M0 to M5 done, each with its review round closed (`docs/reviews/`); 0.9.0 beta released on 2026-10-21, a GitHub prerelease of each plugin. M6 (the log page and the entry form) started with the `UIX` requirements agreed on 2026-10-21. Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
 
 ## 1. What we are building
 
@@ -188,7 +188,7 @@ Original note (2026-10-18): no template exists, so we define it, in this order: 
 
 ## 6. Phases and review rounds
 
-The work is split into phases **M0 to M5** (the former milestones; the ids stay, so every "M1" or "M4" elsewhere in the plan and in `docs/` still points to the right phase). **A phase does not start until the review round of the previous phase is closed.** The review rounds are named R0 to R5 after the phase they follow, and v2 gets its own phases and rounds when it is planned.
+The work is split into phases **M0 to M6** (M0 to M5 are the former milestones; the ids stay, so every "M1" or "M4" elsewhere in the plan and in `docs/` still points to the right phase). **A phase does not start until the review round of the previous phase is closed.** The review rounds are named R0 to R6 after the phase they follow, and v2 gets its own phases and rounds when it is planned.
 
 ### 6.0 How each phase is built (spec first, test first)
 
@@ -232,6 +232,7 @@ End-to-end tests are Behat, Moodle's own e2e layer: about eight teacher-journey 
 | **M3 Log** | Requirements `LOG` and `HIS` written and agreed first. Entry service (create, update, delete), history, late flag, pending list, carry-over, unplanned sessions, stale-save check, events, list/editor/history pages. | Every rule under "Rules that need tests" in section 3 has a passing test; a teacher can log, backfill, edit and delete in one Behat flow; history is complete after every kind of write. |
 | **M4 Export** | Requirements `EXP` written and agreed first. Exporter with the two sheets; summaries overall, per RA or block and per evaluation; safe filename. | Every number in the export equals the number shown on screen; formula and URL payloads stay text on 4.5 and 5.3; the file opens in LibreOffice. |
 | **M5 Hardening and release** | Requirements `REL` written and agreed first (agreed 2026-10-20), for both plugins. Full Behat flow (J9); Catalan and Spanish strings inside each plugin; `README.md` and `CHANGES.md` with the privacy statement in each repository; privacy request end to end; accessibility check of every page; zero coding-standard warnings; GitHub release workflow and its dry run; `0.9.0` BETA. Also the R3 leftovers: a second-submission test of the entry form and the activity settings form (R3-1), a log page with two sessions on one date (R3-2), the README note on deleting an approved activity (R3-3). | A zip built with `git archive` installs on both stacks and uninstalls cleanly; privacy export and deletion work end to end; all checklists in `docs/MOODLE_STANDARDS.md` ticked. |
+| **M6 The log page and the entry form** | Requirements `UIX` written and agreed first (agreed 2026-10-21), from the teacher's input and a UX review of 0.9.0 (`docs/reviews/UX-0.9.0.md`). The session to log first, as a card; upcoming and logged sessions folded after five; every session row opens to show its plan; no sideways scroll on a phone; status as radio buttons, fixed for a future session; "Save and log the next pending session"; a tidier entry form and history page. Only the activity changes: `mod_classprogress` 0.10.0 BETA. | The log page and the entry form meet `UIX` on 4.5 and 5.3 at desktop and phone width, in English and Catalan; axe and the keyboard pass still hold; stored data and the export are unchanged. **Checkpoint: you log a few sessions with it on :8000 and on your phone.** |
 | **v2 Adjustments** | Move or cancel a session as an overlay on the locked plan, with reason; optional reviewer access. | Planned later, with its own phases and review rounds. |
 
 ### 6.3 What each review round looks at (on top of the three lenses)
@@ -244,6 +245,7 @@ End-to-end tests are Behat, Moodle's own e2e layer: about eight teacher-journey 
 | **R3** | Late flag around midnight, across DST changes and when the user's time zone changes. Every write path writes history; deleting an entry keeps it. Stale save from a second browser session. Event order relative to commit. Pending list against holidays, today and future days. Two days on the same date. Entries on a locked plan. IDOR and mass-id requests. "Log in as" (`realuserid`). Deleting the user. |
 | **R4** | Recompute every summary figure independently (a small script reads the XLSX and the database). Formula and URL payloads on 4.5 and 5.3. Empty plan, plan with no entries, RA with no days, evaluation boundary dates, decimal hours, a large plan (three plans of about 400 days), filename injection. |
 | **R5** | Full audit with all lenses over the whole code base. The real zips from the release dry run installed on fresh sites of 4.5 and 5.3 (throwaway stacks of their own, not the test stacks), then uninstalled, activity first, leaving no table, setting or capability behind. The lab upgraded from 0.1.0 with its data (backup first). Privacy export and delete through the admin pages. Keyboard pass of the main pages. A reader who has not seen the project follows `README.md` from scratch. You read the Catalan and Spanish strings and open an exported file in LibreOffice (R4-3). Your sign-off. |
+| **R6** | One reviewer over the M6 changes with the UX and accessibility lenses: the log page and the entry form at 390 px and 1366 px on 4.5 and 5.3, in Catalan; keyboard pass; Behat churn kept to what `UIX` needed. Your try on :8000 and on your phone. The lab upgraded (backup first). |
 
 ## 7. Risks
 

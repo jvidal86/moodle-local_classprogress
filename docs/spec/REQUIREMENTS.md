@@ -1,6 +1,6 @@
 # Requirements
 
-Format and cycle: see `README.md`. The requirements of M1 to M3 were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS` and `MOD` were agreed in M3; `EXP` was agreed on 2026-10-19 for M4 and `REL` on 2026-10-20 for M5.
+Format and cycle: see `README.md`. The requirements of M1 to M3 were accepted (status `agreed`) on 2026-10-18; the plan parser requirements (`PLN`) are already backed by running tests (`python3 tools/check_plan.py --selftest`). `LOG`, `HIS` and `MOD` were agreed in M3; `EXP` was agreed on 2026-10-19 for M4 and `REL` on 2026-10-20 for M5, and `UIX` on 2026-10-21 for M6.
 
 ---
 
@@ -410,3 +410,37 @@ Through the site's data privacy tool (`tool_dataprivacy`), on both versions: a d
 ### REQ-REL-007 Accessibility
 Phase: M5 · Status: agreed
 Every page of both plugins (the top-menu page, the school year pages, and the activity's settings, import and preview, plan, log, entry, history and export pages) passes Moodle's automated accessibility check (`the page should meet accessibility standards`, axe) on 4.5 and 5.3, with the forms in both their empty and their error state. Every form field has a label, and every action is a link or a button that the keyboard reaches; the plugins add no JavaScript of their own.
+
+---
+
+## UIX · The log page and the entry form (M6) · agreed 2026-10-21
+
+Why: the teacher logs at the end of class on the classroom PC, later the same day on a laptop, and on the phone, and found the log page too long, too many clicks per session, and the plans of future lessons out of sight (2026-10-21). Built from that input and a UX review of 0.9.0 (`docs/reviews/`, M6). Decided by the teacher on 2026-10-21: the full entry form stays (what was done is always written, REQ-LOG-002 unchanged); the session to log comes first, as a card with a button that opens its form; the next few upcoming sessions are listed and the rest of the term is folded; the deviation keeps its reason, note and corrective measure (REQ-LOG-003 unchanged). Only the activity changes (`mod_classprogress` 0.10.0); what is stored and exported does not.
+
+### REQ-UIX-001 The session to log comes first
+Phase: M6 · Status: agreed
+Above the session lists, the log page shows one card: the first session dated today that has no entry, titled "Today", or, when there is none, the next session after today, titled "Next session". The card shows its date, title, hours, RA or block and its full planned content (rendered as on the entry form), and one button: "Log this session" for today, "Log a cancellation" for a later session (REQ-LOG-009). An approved plan with no session left shows no card.
+
+### REQ-UIX-002 Order and length of the log page
+Phase: M6 · Status: agreed
+Below the card come, in this order: pending sessions (all, oldest first, REQ-LOG-001); upcoming sessions, the next five listed and the others in a folded section "All upcoming sessions (N)"; logged sessions, newest first, the latest five listed and the others in a folded section "All logged sessions (N)"; and last, the history of deleted entries. Folding uses HTML `<details>`, which the keyboard opens and which adds no JavaScript (REQ-REL-007). Each list keeps its count in its heading.
+
+### REQ-UIX-003 Every session row opens to show its plan
+Phase: M6 · Status: agreed
+In every list of the log page, a session's title opens in place to show the session's RA or block, hours and full planned content, and closes again. A session whose title is empty shows the first line of its planned content, cut to about 60 characters, as its title. A logged row also shows the first line of what was done, cut to about 80 characters, under its title.
+
+### REQ-UIX-004 The log page on a phone
+Phase: M6 · Status: agreed
+At 390 px wide, the log page never scrolls sideways, in English and in Catalan. On narrow screens the RA or block and the written-on date move out of their own columns (the block under the title, the late badge under the date, which stays visible as REQ-LOG-004 requires), and a row's actions stack.
+
+### REQ-UIX-005 Status as one choice of three
+Phase: M6 · Status: agreed
+The status of a planned session dated today or earlier is chosen with three radio buttons (done, partly done, not done), all visible, with done preselected for a new entry. For a session after today, the form shows the status as the fixed text "Not done (cancellation known in advance)" and asks only for the reason, note and corrective measure (REQ-LOG-009). The reason is labelled as required wherever it is shown.
+
+### REQ-UIX-006 Save and log the next pending session
+Phase: M6 · Status: agreed
+When another pending session remains after the one being saved, the entry form has a second button, "Save and log the next pending session (N left)", which saves the entry and opens the form of the oldest pending session left. "Save entry" still returns to the log page.
+
+### REQ-UIX-007 The entry form and the history page
+Phase: M6 · Status: agreed
+The entry form shows the session's date and title once, as its heading, with the planned content below it. The written-on date, the last-edited time and the History and Delete entry links follow the form's buttons. The note and the corrective measure are smaller text boxes than what was done. The history page names the session in its heading (date and title, with the fallback of REQ-UIX-003) and ends with "Back to the session log".
