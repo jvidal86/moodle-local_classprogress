@@ -1,6 +1,6 @@
 # Changes
 
-## 0.9.0 (unreleased)
+## 0.9.0 (2026-10-21)
 
 First release, beta, for Moodle 4.5 to 5.3. Needs `mod_classprogress` 0.9.0 to plan and log classes.
 

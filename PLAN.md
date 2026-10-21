@@ -1,6 +1,6 @@
 # Class progress tracking: Moodle plugin plan
 
-Status (2026-10-20): M0 to M4 done, each with its review round closed (`docs/reviews/`); M5 started with the `REL` requirements agreed on 2026-10-20. Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
+Status (2026-10-21): M0 to M5 done, each with its review round closed (`docs/reviews/`); 0.9.0 beta released on 2026-10-21, a GitHub prerelease of each plugin. Work proceeds in phases M0 to M5, each followed by a review round (section 6). Prototype: `prototype/index.html`.
 
 ## 1. What we are building
 
