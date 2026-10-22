@@ -24,12 +24,16 @@ namespace local_classprogress\local;
  * and entities decoded, and line breaks stay. Code keeps its text as typed. A "<" that does not open a tag, such as
  * in "<C++>" or "<-", is text, and so are underscores inside words (pg_hba_file). Pure logic: no Moodle API.
  *
+ * Text the inline rules must not touch is set aside as a mark, U+E000, its number, U+E001. Those two characters typed
+ * in the text, or written as entities, are set aside first, so every mark in the text is the converter's own and every
+ * character stays as typed (R6-1).
+ *
  * @package    local_classprogress
  * @copyright  2026 Jordi Vidal
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class plain_text {
-    /** @var string Opens a piece of text set aside from the inline rules; private-use characters never typed. */
+    /** @var string Opens a piece of text set aside from the inline rules; typed, it is set aside itself. */
     private const OPEN = "\u{E000}";
 
     /** @var string Closes a piece of text set aside. */
@@ -52,14 +56,13 @@ final class plain_text {
      */
     public static function from_markdown(string $markdown): string {
         $kept = [];
-        $text = self::blocks(str_replace(["\r\n", "\r"], "\n", $markdown), $kept);
-        $text = self::inline($text, $kept);
-        $restore = fn(array $m): string => $kept[(int) $m[1]];
-        // Text set aside may hold more text set aside (a link's address inside a link's text, never deeper than that).
-        while (str_contains($text, self::OPEN)) {
-            $text = preg_replace_callback('/' . self::OPEN . '(\d+)' . self::CLOSE . '/u', $restore, $text);
-        }
-        $lines = array_map('rtrim', explode("\n", $text));
+        $text = str_replace(["\r\n", "\r"], "\n", $markdown);
+        $keep = function (array $m) use (&$kept): string {
+            return self::keep($m[0], $kept);
+        };
+        $text = preg_replace_callback('/[' . self::OPEN . self::CLOSE . ']/u', $keep, $text);
+        $text = self::inline(self::blocks($text, $kept), $kept);
+        $lines = array_map('rtrim', explode("\n", self::restore($text, $kept)));
         return trim(implode("\n", $lines), "\n");
     }
 
@@ -142,7 +145,30 @@ final class plain_text {
         $text = preg_replace('/\*(?=[^\s*])' . $in . '(?<=[^\s*])\*/u', '$1', $text);
         $text = preg_replace("/(?<!{$word})_(?=[^\\s_]){$in}(?<=[^\\s_])_(?!{$word})/u", '$1', $text);
         $text = preg_replace('/~~(?=\S)' . $in . '(?<=\S)~~/u', '$1', $text);
-        return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Entities, one by one: one that stands for a private-use character of the marks is set aside as that character.
+        $entity = function (array $m) use (&$kept): string {
+            $char = html_entity_decode($m[0], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return $char === self::OPEN || $char === self::CLOSE ? self::keep($char, $kept) : $char;
+        };
+        return preg_replace_callback('/&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#[xX][0-9A-Fa-f]+);/', $entity, $text);
+    }
+
+    /**
+     * Puts the text set aside back in place of its marks, in one pass. A piece set aside holds only marks set aside
+     * before it (a link's address inside a link's text, never deeper than that), so each piece is put back with the
+     * pieces numbered below it, and what is put back is never read again for marks.
+     *
+     * @param string $text The text with its marks.
+     * @param string[] $kept Text set aside, by number.
+     * @param int $below The pieces this text may hold are those numbered below this.
+     * @return string The text.
+     */
+    private static function restore(string $text, array $kept, int $below = PHP_INT_MAX): string {
+        $put = function (array $m) use ($kept, $below): string {
+            $number = (int) $m[1];
+            return $number < $below && isset($kept[$number]) ? self::restore($kept[$number], $kept, $number) : $m[0];
+        };
+        return preg_replace_callback('/' . self::OPEN . '(\d+)' . self::CLOSE . '/u', $put, $text);
     }
 
     /**

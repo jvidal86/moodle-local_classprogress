@@ -116,6 +116,75 @@ final class plain_text_test extends \basic_testcase {
     }
 
     /**
+     * Text holding U+E000 and U+E001, the private-use characters the converter uses to set text aside, and what it must
+     * give: the characters exactly as typed, with only the markup gone (R6-1).
+     *
+     * @return array
+     */
+    public static function private_use_provider(): array {
+        $open = "\u{E000}";
+        $close = "\u{E001}";
+        return [
+            'one opening character' => ["{$open}abc", "{$open}abc"],
+            'a typed mark' => ["{$open}0{$close}", "{$open}0{$close}"],
+            'a typed mark between words' => ["x {$open}9{$close} y", "x {$open}9{$close} y"],
+            'closing before opening' => ["{$close}1{$open}", "{$close}1{$open}"],
+            'a mark for a slot the converter fills' => ["`code` {$open}0{$close} [a](b)", "code {$open}0{$close} a (b)"],
+            'inside emphasis and code' => ["**{$open}0{$close}** `{$close}`", "{$open}0{$close} {$close}"],
+            'inside a link' => ["[{$open}2{$close}](http://x/{$close}3)", "{$open}2{$close} (http://x/{$close}3)"],
+            'inside fenced code' => ["\x60\x60\x60\n{$open}1{$close} **b**\n\x60\x60\x60", "{$open}1{$close} **b**"],
+            'as entities' => ['&#xE000;0&#xE001; &#57344;', "{$open}0{$close} {$open}"],
+            'a bullet' => ["- {$open}", "• {$open}"],
+        ];
+    }
+
+    /**
+     * Text holding the converter's private-use characters converts like any other: they stay as typed, and the
+     * conversion neither hangs nor fails (R6-1).
+     *
+     * @group REQ-EXP-007
+     * @dataProvider private_use_provider
+     * @param string $markdown The Markdown.
+     * @param string $expected The plain text.
+     */
+    public function test_private_use_characters_stay_as_typed(string $markdown, string $expected): void {
+        $this->assertSame($expected, plain_text::from_markdown($markdown));
+    }
+
+    /**
+     * Text without markup made of private-use characters, digits, letters and spaces comes back as it went in, and
+     * converting the result again changes nothing (R6-1).
+     *
+     * @group REQ-EXP-007
+     */
+    public function test_private_use_characters_round_trip(): void {
+        $alphabet = ["\u{E000}", "\u{E001}", '0', '1', '9', 'a', 'é', ' '];
+        mt_srand(61);
+        for ($case = 0; $case < 500; $case++) {
+            $text = '';
+            for ($i = mt_rand(1, 40); $i > 0; $i--) {
+                $text .= $alphabet[mt_rand(0, count($alphabet) - 1)];
+            }
+            $plain = plain_text::from_markdown($text);
+            $this->assertSame(trim(rtrim($text), "\n"), $plain, bin2hex($text));
+            $this->assertSame($plain, plain_text::from_markdown($plain), bin2hex($text));
+        }
+    }
+
+    /**
+     * A plan day at the size limit (200 KB) made of typed marks converts at once and loses nothing (R6-1).
+     *
+     * @group REQ-EXP-007
+     */
+    public function test_private_use_characters_convert_in_linear_time(): void {
+        $text = str_repeat("\u{E000}0\u{E001} ", 30000);
+        $started = hrtime(true);
+        $plain = plain_text::from_markdown($text);
+        $this->assertLessThan(1.0, (hrtime(true) - $started) / 1e9);
+        $this->assertSame(rtrim($text), $plain);
+    }
+
+    /**
      * The three real plans.
      *
      * @return array
