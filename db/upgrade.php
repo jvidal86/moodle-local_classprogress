@@ -78,5 +78,10 @@ function xmldb_local_classprogress_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026102000, 'local', 'classprogress');
     }
 
+    if ($oldversion < 2026102200) {
+        // Release 0.9.1 changes no table; the savepoint keeps the upgrade ending at the current version.
+        upgrade_plugin_savepoint(true, 2026102200, 'local', 'classprogress');
+    }
+
     return true;
 }

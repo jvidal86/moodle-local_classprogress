@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_classprogress';
-$plugin->version   = 2026102000;
+$plugin->version   = 2026102200;
 $plugin->requires  = 2024100700; // Moodle 4.5.0.
 $plugin->supported = [405, 503];
-$plugin->release   = '0.9.0';
+$plugin->release   = '0.9.1';
 $plugin->maturity  = MATURITY_BETA;

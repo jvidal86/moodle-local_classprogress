@@ -40,8 +40,8 @@ final class release_version_test extends \advanced_testcase {
     }
 
     /**
-     * The plugin is released as 0.9.0 beta, for Moodle 4.5.0 and later, supported on 4.5 to 5.3, with a version above
-     * every earlier one.
+     * The plugin is released as 0.9.1 beta (the R6-1 fix of the Markdown converter), for Moodle 4.5.0 and later,
+     * supported on 4.5 to 5.3, with a version above every earlier one.
      *
      * @group REQ-REL-001
      */
@@ -49,7 +49,7 @@ final class release_version_test extends \advanced_testcase {
         $plugin = self::version_file();
 
         $this->assertSame('local_classprogress', $plugin->component);
-        $this->assertSame('0.9.0', $plugin->release);
+        $this->assertSame('0.9.1', $plugin->release);
         $this->assertSame(MATURITY_BETA, $plugin->maturity);
         $this->assertSame(2024100700, $plugin->requires);
         $this->assertSame([405, 503], $plugin->supported);

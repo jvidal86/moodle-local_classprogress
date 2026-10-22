@@ -385,7 +385,7 @@ What a school needs to install, run, translate and remove both plugins, and what
 
 ### REQ-REL-001 Release versions
 Phase: M5 · Status: agreed
-Both plugins are released as `0.9.0` with maturity `MATURITY_BETA` (decided by the teacher on 2026-10-20: `1.0.0` stable follows a few weeks of real classes), a `version` above every earlier one (2026101900, installed on the lab), `requires` 2024100700 (4.5.0) and `supported` [405, 503]; the activity depends on the local plugin's release version. The release changes no table, so a site with 0.1.0 data upgrades without losing any of it. Amended 2026-10-22 (M6): the activity alone moves on to `0.10.0` beta (version 2026102100) for the log page and the entry form, so the two releases may differ; the activity still depends on the local plugin's version exactly.
+Both plugins are released as `0.9.0` with maturity `MATURITY_BETA` (decided by the teacher on 2026-10-20: `1.0.0` stable follows a few weeks of real classes), a `version` above every earlier one (2026101900, installed on the lab), `requires` 2024100700 (4.5.0) and `supported` [405, 503]; the activity depends on the local plugin's release version. The release changes no table, so a site with 0.1.0 data upgrades without losing any of it. Amended 2026-10-22 (M6, R6): the local plugin moves on to `0.9.1` beta (version 2026102200) for the fix of R6-1, and the activity to `0.10.0` beta (version 2026102100) for the log page and the entry form, so the two releases differ; the activity depends on the local plugin's version 2026102200 exactly.
 
 ### REQ-REL-002 The release zip
 Phase: M5 · Status: agreed

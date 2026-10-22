@@ -1,5 +1,13 @@
 # Changes
 
+## 0.9.1 (unreleased)
+
+A fix found in review R6, for `mod_classprogress` 0.10.0, which needs this version.
+
+- The Markdown converter behind the export and the log page keeps the private-use characters U+E000 and U+E001 as
+  typed. Before, one of them in a plan or an entry made the conversion loop forever or fail, which took the activity's
+  log page down from 0.10.0 on.
+
 ## 0.9.0 (2026-10-21)
 
 First release, beta, for Moodle 4.5 to 5.3. Needs `mod_classprogress` 0.9.0 to plan and log classes.
